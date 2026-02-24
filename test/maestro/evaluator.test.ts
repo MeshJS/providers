@@ -1,5 +1,3 @@
-import dotenv from "dotenv";
-
 import {
   applyCborEncoding,
   DRep,
@@ -9,8 +7,6 @@ import {
 } from "@meshsdk/core";
 import { blake2b } from "@meshsdk/core-cst";
 import { MaestroProvider } from "@meshsdk/provider";
-
-dotenv.config();
 const apiKey = process.env.MAESTRO_API_KEY!;
 const provider = new MaestroProvider({ apiKey, network: "Preprod" });
 
@@ -60,7 +56,7 @@ describe("Maestro Evaluator", () => {
 
   it("should succeed with with registering certificates", async () => {
     const txHash = (tx: string) => {
-      return blake2b(32).update(Buffer.from(tx, "utf-8")).digest("hex");
+      return blake2b.hash(Buffer.from(tx, "utf-8"), 32).toString("hex");
     };
 
     const alwaysSucceedCbor = applyCborEncoding(

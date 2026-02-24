@@ -523,7 +523,7 @@ describe("OfflineFetcher", () => {
   });
 
   describe("toJSON and fromJSON", () => {
-    it("should serialize and deserialize correctly", () => {
+    it("should serialize and deserialize correctly", async () => {
       fetcher.addAccount(validBech32Address, sampleAccountInfo);
       fetcher.addUTxOs([sampleUTxO]);
       fetcher.addAssetMetadata(validAsset, sampleAssetMetadata);
@@ -535,30 +535,33 @@ describe("OfflineFetcher", () => {
 
       const json = fetcher.toJSON();
       const newFetcher = OfflineFetcher.fromJSON(json);
+      const sampleAssetPolicyId = sampleAsset.unit.slice(0, 56);
 
       // Test fetch methods
-      expect(newFetcher.fetchAccountInfo(validBech32Address)).resolves.toEqual(
-        sampleAccountInfo,
-      );
-      expect(newFetcher.fetchAddressUTxOs(validBech32Address)).resolves.toEqual(
-        [sampleUTxO],
-      );
-      expect(newFetcher.fetchAssetMetadata(validAsset)).resolves.toEqual(
+      await expect(
+        newFetcher.fetchAccountInfo(validBech32Address),
+      ).resolves.toEqual(sampleAccountInfo);
+      await expect(
+        newFetcher.fetchAddressUTxOs(validBech32Address),
+      ).resolves.toEqual([sampleUTxO]);
+      await expect(newFetcher.fetchAssetMetadata(validAsset)).resolves.toEqual(
         sampleAssetMetadata,
       );
-      expect(newFetcher.fetchBlockInfo(sampleBlockInfo.hash)).resolves.toEqual(
-        sampleBlockInfo,
-      );
-      expect(newFetcher.fetchProtocolParameters(validEpoch)).resolves.toEqual(
-        sampleProtocolParameters,
-      );
-      expect(
+      await expect(
+        newFetcher.fetchBlockInfo(sampleBlockInfo.hash),
+      ).resolves.toEqual(sampleBlockInfo);
+      await expect(
+        newFetcher.fetchProtocolParameters(validEpoch),
+      ).resolves.toEqual(sampleProtocolParameters);
+      await expect(
         newFetcher.fetchTxInfo(sampleTransactionInfo.hash),
       ).resolves.toEqual(sampleTransactionInfo);
-      expect(newFetcher.fetchAssetAddresses(validAsset)).resolves.toEqual([
-        sampleAssetAddress,
-      ]);
-      expect(newFetcher.fetchCollectionAssets(validPolicyId)).resolves.toEqual({
+      await expect(newFetcher.fetchAssetAddresses(validAsset)).resolves.toEqual(
+        [sampleAssetAddress],
+      );
+      await expect(
+        newFetcher.fetchCollectionAssets(sampleAssetPolicyId),
+      ).resolves.toEqual({
         assets: [sampleAsset],
         next: undefined,
       });
