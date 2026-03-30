@@ -564,6 +564,7 @@ export class YaciProvider
           certificate: "CERT",
           publish: "CERT",
           reward: "REWARD",
+          vote: "VOTE",
         };
         const result: Omit<Action, "data">[] = [];
 
