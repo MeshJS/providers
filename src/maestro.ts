@@ -420,8 +420,9 @@ export class MaestroProvider
       );
     };
     try {
-      const { data: timestampedData, status } =
-        await this._axiosInstance.get("protocol-params");
+      const { data: timestampedData, status } = await this._axiosInstance.get(
+        "protocol-parameters",
+      );
       if (status === 200) {
         const data = timestampedData.data;
         try {
