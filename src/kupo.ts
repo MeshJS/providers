@@ -84,6 +84,9 @@ export class KupoProvider implements IFetcher {
   fetchProtocolParameters(epoch: number): Promise<Protocol> {
     throw new Error("Method not implemented.");
   }
+  fetchCostModels(epoch?: number): Promise<number[][]> {
+    throw new Error("Method not implemented.");
+  }
   fetchTxInfo(hash: string): Promise<TransactionInfo> {
     throw new Error("Method not implemented.");
   }

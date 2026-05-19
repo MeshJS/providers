@@ -467,6 +467,10 @@ export class MaestroProvider
     }
   }
 
+  async fetchCostModels(epoch?: number): Promise<number[][]> {
+    throw new Error("Method not implemented.");
+  }
+
   /**
    * Fetches the transaction information for a given transaction hash.
    * @param hash The transaction hash to fetch
@@ -557,7 +561,7 @@ export class MaestroProvider
     try {
       const { data, status } = await this._axiosInstance.post(url, body, {
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
       });
       if (status === 200) {

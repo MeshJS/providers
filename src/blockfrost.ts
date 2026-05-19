@@ -523,6 +523,39 @@ export class BlockfrostProvider
     }
   }
 
+  async fetchCostModels(epoch?: number): Promise<number[][]> {
+    if (epoch) {
+      try {
+        const { data, status } = await this._axiosInstance.get(
+          `/epochs/${epoch}/parameters`,
+        );
+
+        if (status === 200) {
+          return [
+            data.cost_models_raw.PlutusV1,
+            data.cost_models_raw.PlutusV2,
+            data.cost_models_raw.PlutusV3,
+          ];
+        }
+      } catch (error) {
+        throw parseHttpError(error);
+      }
+    } else {
+      const { data, status } = await this._axiosInstance.get(
+        `/epochs/latest/parameters`,
+      );
+
+      if (status === 200) {
+        return [
+          data.cost_models_raw.PlutusV1,
+          data.cost_models_raw.PlutusV2,
+          data.cost_models_raw.PlutusV3,
+        ];
+      }
+    }
+    throw new Error("Cost models are not available from Blockfrost API.");
+  }
+
   /**
    * Fetch the latest protocol parameters.
    * @param epoch Optional - The epoch to fetch protocol parameters for

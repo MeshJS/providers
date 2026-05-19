@@ -386,6 +386,10 @@ export class KoiosProvider
     }
   }
 
+  async fetchCostModels(epoch?: number): Promise<number[][]> {
+    throw new Error("Method not implemented.");
+  }
+
   /**
    * Fetches the transaction information for a given transaction hash.
    * @param hash The transaction hash to fetch

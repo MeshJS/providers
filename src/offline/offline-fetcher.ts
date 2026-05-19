@@ -305,6 +305,10 @@ export class OfflineFetcher implements IFetcher {
     return parameters;
   }
 
+  async fetchCostModels(epoch?: number): Promise<number[][]> {
+    throw new Error("Method not implemented.");
+  }
+
   /**
    * Fetches information about a specific transaction.
    * @param hash - Transaction hash
