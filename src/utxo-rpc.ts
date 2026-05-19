@@ -253,8 +253,9 @@ export class U5CProvider
   async fetchAddressUTxOs(address: string, asset?: string): Promise<UTxO[]> {
     const addressBytes = hexToBytes(Address.fromBech32(address).toBytes());
 
-    const utxoSearchResult =
-      await this.queryClient.searchUtxosByAddress(new Uint8Array(addressBytes));
+    const utxoSearchResult = await this.queryClient.searchUtxosByAddress(
+      new Uint8Array(addressBytes),
+    );
 
     return utxoSearchResult
       .map((item) => {
@@ -371,6 +372,10 @@ export class U5CProvider
     return this._rpcPParamsToProtocol(rpcPParams);
   }
 
+  async fetchCostModels(epoch?: number): Promise<number[][]> {
+    throw new Error("Method not implemented.");
+  }
+
   /**
    * Unimplemented - open for contribution
    *
@@ -388,7 +393,9 @@ export class U5CProvider
    * @param hash - The transaction hash
    */
   async fetchUTxOs(hash: string, index?: number): Promise<UTxO[]> {
-    const txHashBytes = new Uint8Array(hexToBytes(hash)) as Uint8Array<ArrayBuffer>;
+    const txHashBytes = new Uint8Array(
+      hexToBytes(hash),
+    ) as Uint8Array<ArrayBuffer>;
 
     // Fetch specific UTxO if index is given
     if (index !== undefined) {
@@ -529,7 +536,9 @@ export class U5CProvider
         rpcTxOutput.script.script.case !== "native" &&
         rpcTxOutput.script.script.value
       ) {
-        scriptRef = bytesToHex(rpcTxOutput.script.script.value.buffer as ArrayBuffer);
+        scriptRef = bytesToHex(
+          rpcTxOutput.script.script.value.buffer as ArrayBuffer,
+        );
         scriptRef = cbor.encode(Buffer.from(scriptRef, "hex")).toString("hex");
         let V: "V1" | "V2" | "V3";
         if (rpcTxOutput.script.script.case === "plutusV1") {

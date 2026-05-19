@@ -420,8 +420,9 @@ export class MaestroProvider
       );
     };
     try {
-      const { data: timestampedData, status } =
-        await this._axiosInstance.get("protocol-params");
+      const { data: timestampedData, status } = await this._axiosInstance.get(
+        "protocol-parameters",
+      );
       if (status === 200) {
         const data = timestampedData.data;
         try {
@@ -464,6 +465,32 @@ export class MaestroProvider
       throw parseHttpError(timestampedData);
     } catch (error) {
       throw parseHttpError(error);
+    }
+  }
+
+  async fetchCostModels(epoch?: number): Promise<number[][]> {
+    if (epoch) {
+      throw new Error(
+        "Maestro only supports fetching cost models of the latest completed epoch.",
+      );
+    } else {
+      try {
+        const { data: timestampedData, status } = await this._axiosInstance.get(
+          "protocol-parameters",
+        );
+
+        if (status === 200) {
+          const costModels = timestampedData.data.plutus_cost_models;
+          return [
+            costModels.plutus_v1,
+            costModels.plutus_v2,
+            costModels.plutus_v3,
+          ];
+        }
+        throw parseHttpError(timestampedData);
+      } catch (error) {
+        throw parseHttpError(error);
+      }
     }
   }
 
@@ -557,7 +584,7 @@ export class MaestroProvider
     try {
       const { data, status } = await this._axiosInstance.post(url, body, {
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
       });
       if (status === 200) {
