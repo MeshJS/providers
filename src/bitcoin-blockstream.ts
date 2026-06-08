@@ -57,7 +57,7 @@ export class BlockstreamBitcoinProvider implements IBitcoinProvider {
     return this.get(`/address/${address}/utxo`);
   }
 
-  async fetchUTxOs(txid: string, vout?: number): Promise<BitcoinUTxO[]> {
+  async fetchUTxO(txid: string, vout?: number): Promise<BitcoinUTxO[]> {
     const [tx, outspends] = await Promise.all([
       this.get<BitcoinTxInfo>(`/tx/${txid}`),
       this.get<{ spent: boolean }[]>(`/tx/${txid}/outspends`),

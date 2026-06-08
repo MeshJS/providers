@@ -86,7 +86,7 @@ export type BitcoinTxInfo = {
 export interface IBitcoinFetcher {
   fetchAddressInfo(address: string): Promise<BitcoinAddressInfo>;
   fetchAddressUTxOs(address: string): Promise<BitcoinUTxO[]>;
-  fetchUTxOs(txid: string, vout?: number): Promise<BitcoinUTxO[]>;
+  fetchUTxO(txid: string, vout?: number): Promise<BitcoinUTxO[]>;
   fetchAddressTxs(address: string, lastSeenTxid?: string): Promise<BitcoinTxInfo[]>;
   fetchTxInfo(txid: string): Promise<BitcoinTxStatus>;
   fetchFeeEstimates(blocks: number): Promise<number>;
