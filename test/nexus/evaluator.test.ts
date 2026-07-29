@@ -99,4 +99,33 @@ describe("NexusProvider evaluator", () => {
     expect(typeof utxos[0]!.output.scriptRef).toBe("string");
     expect(utxos[0]!.output.scriptRef!.length).toBeGreaterThan(0);
   });
+
+  it("maps Conway governance redeemer tags (vote / propose)", async () => {
+    const post = jest.fn(async () => ({
+      status: 200,
+      data: [
+        { redeemerTag: "vote", index: 0, exUnits: { mem: 10, steps: 20 } },
+        { redeemerTag: "propose", index: 1, exUnits: { mem: 30, steps: 40 } },
+      ],
+    }));
+    const provider = makeProvider(async () => ({ status: 200 }), post);
+
+    const res = await provider.evaluateTx("aabbcc");
+    expect(res).toEqual([
+      { tag: "VOTE", index: 0, budget: { mem: 10, steps: 20 } },
+      { tag: "PROPOSE", index: 1, budget: { mem: 30, steps: 40 } },
+    ]);
+  });
+
+  it("rejects an unknown redeemer tag instead of emitting an undefined tag", async () => {
+    const post = jest.fn(async () => ({
+      status: 200,
+      data: [{ redeemerTag: "bogus", index: 0, exUnits: { mem: 1, steps: 2 } }],
+    }));
+    const provider = makeProvider(async () => ({ status: 200 }), post);
+
+    await expect(provider.evaluateTx("aabbcc")).rejects.toMatch(
+      /Unknown redeemer tag/,
+    );
+  });
 });

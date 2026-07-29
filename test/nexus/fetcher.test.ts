@@ -123,4 +123,18 @@ describe("NexusProvider fetcher", () => {
       expect.anything(),
     );
   });
+
+  it("normalizes a quoted / whitespace-padded submit response to a bare hash", async () => {
+    const post = jest.fn(async () => ({
+      status: 200,
+      data: `  "${"ee".repeat(32)}"\n`,
+    }));
+    const provider = makeProvider(
+      async () => ({ status: 200, data: {} }),
+      post,
+    );
+
+    const hash = await provider.submitTx("00ff");
+    expect(hash).toBe("ee".repeat(32));
+  });
 });

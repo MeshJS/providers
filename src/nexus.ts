@@ -149,19 +149,28 @@ export class NexusProvider
           reward: "REWARD",
           withdraw: "REWARD",
           withdrawal: "REWARD",
+          vote: "VOTE",
+          voting: "VOTE",
+          propose: "PROPOSE",
+          proposing: "PROPOSE",
         };
 
-        return data.map(
-          (redeemer: NexusRedeemerEval) =>
-            <Omit<Action, "data">>{
-              tag: tagMap[redeemer.redeemerTag.toLowerCase()]!,
-              index: Number(redeemer.index),
-              budget: {
-                mem: Number(redeemer.exUnits.mem),
-                steps: Number(redeemer.exUnits.steps),
-              },
+        return data.map((redeemer: NexusRedeemerEval) => {
+          const tag = tagMap[redeemer.redeemerTag.toLowerCase()];
+          if (!tag) {
+            // Throw a string, not an Error: the surrounding catch runs it through
+            // parseHttpError, which JSON.stringifies (an Error would become "{}").
+            throw `Unknown redeemer tag from Nexus: ${redeemer.redeemerTag}`;
+          }
+          return <Omit<Action, "data">>{
+            tag,
+            index: Number(redeemer.index),
+            budget: {
+              mem: Number(redeemer.exUnits.mem),
+              steps: Number(redeemer.exUnits.steps),
             },
-        );
+          };
+        });
       }
 
       throw parseHttpError(data);
@@ -262,27 +271,24 @@ export class NexusProvider
     const filter = asset !== undefined ? `/${asset}` : "";
     const url = `addresses/${address}/utxos${filter}`;
 
-    const paginateUTxOs = async (
-      page = 1,
-      utxos: UTxO[] = [],
-    ): Promise<UTxO[]> => {
-      const { data, status } = await this._axiosInstance.get(
-        `${url}?page=${page}&pageSize=${DEFAULT_PAGE_SIZE}`,
-      );
-
-      if (status === 200 || status === 202)
-        return data.length > 0
-          ? paginateUTxOs(page + 1, [
-              ...utxos,
-              ...data.map((utxo: NexusAddressUTxO) => this.toUTxO(utxo)),
-            ])
-          : utxos;
-
-      throw parseHttpError(data);
-    };
-
+    // Iterative pagination: a full page means "there may be more", a short (or
+    // empty) page is the last one. MAX_PAGES bounds a backend that ignores
+    // pagination and keeps returning full pages, so this can never loop forever.
+    const MAX_PAGES = 10_000;
+    const utxos: UTxO[] = [];
     try {
-      return await paginateUTxOs();
+      for (let page = 1; page <= MAX_PAGES; page++) {
+        const { data, status } = await this._axiosInstance.get(
+          `${url}?page=${page}&pageSize=${DEFAULT_PAGE_SIZE}`,
+        );
+        if (status !== 200 && status !== 202) throw parseHttpError(data);
+        if (!data || data.length === 0) break;
+        for (const utxo of data as NexusAddressUTxO[]) {
+          utxos.push(this.toUTxO(utxo));
+        }
+        if (data.length < DEFAULT_PAGE_SIZE) break;
+      }
+      return utxos;
     } catch (error) {
       return [];
     }
@@ -652,7 +658,10 @@ export class NexusProvider
     let attempts = 0;
 
     const checkTx = setInterval(() => {
-      if (attempts >= limit) clearInterval(checkTx);
+      if (attempts >= limit) {
+        clearInterval(checkTx);
+        return;
+      }
 
       this.fetchTxInfo(txHash)
         .then((txInfo) => {
@@ -687,7 +696,12 @@ export class NexusProvider
         { headers },
       );
 
-      if (status === 200 || status === 202) return data;
+      // Nexus returns the tx hash as a text/plain body that may be quoted or
+      // whitespace-padded; normalize to a bare hash.
+      if (status === 200 || status === 202)
+        return typeof data === "string"
+          ? data.trim().replace(/^"|"$/g, "")
+          : data;
 
       throw parseHttpError(data);
     } catch (error) {
@@ -756,11 +770,12 @@ export class NexusProvider
       ),
       dataHash: utxo.data_hash ?? undefined,
       plutusData: utxo.inline_datum ?? undefined,
-      // The tx-scoped UTxO shape may carry the script CBOR directly (`script_ref`);
-      // otherwise resolve it from the reference script hash.
-      scriptRef:
-        utxo.script_ref ??
-        (await this.resolveScriptRefByHash(utxo.reference_script_hash)),
+      // `script_ref` carries language-tagged CBOR (`82 0X <script>`); unwrap it to
+      // a normalized Mesh scriptRef rather than passing the tagged bytes through.
+      // When only the hash is present, resolve the script via /scripts/{hash}.
+      scriptRef: utxo.script_ref
+        ? this.unwrapScriptRef(utxo.script_ref)
+        : await this.resolveScriptRefByHash(utxo.reference_script_hash),
       scriptHash: utxo.reference_script_hash ?? undefined,
     },
   });
@@ -815,16 +830,37 @@ export class NexusProvider
     return undefined;
   };
 
+  // Reference-script CBOR is language-tagged (`82 0X <script>`): 00 → native,
+  // 01/02/03 → Plutus V1/V2/V3. The tag selects the script type and is stripped.
+  private static readonly SCRIPT_REF_LANGUAGE_TAGS: Record<string, string> = {
+    "8200": "native",
+    "8201": "plutusV1",
+    "8202": "plutusV2",
+    "8203": "plutusV3",
+  };
+
+  private unwrapScriptRef = (scriptRefCbor: string): string | undefined => {
+    const tag =
+      NexusProvider.SCRIPT_REF_LANGUAGE_TAGS[
+        scriptRefCbor.slice(0, 4).toLowerCase()
+      ];
+    if (tag) return this.scriptRefFromParts(tag, scriptRefCbor.slice(4));
+    // No recognized language prefix: treat the whole value as a Plutus V2 body.
+    return this.scriptRefFromParts("plutusV2", scriptRefCbor);
+  };
+
   private scriptRefFromParts = (
     type: string,
     bytes: string,
   ): string | undefined => {
+    // Nexus types are lowercase-`plutus` by convention, but match case-insensitively.
+    const kind = type.toLowerCase();
     let script;
-    if (type.startsWith("plutus")) {
+    if (kind.startsWith("plutus")) {
       const normalized = normalizePlutusScript(bytes, "DoubleCBOR");
       script = <PlutusScript>{
         code: normalized,
-        version: type.replace("plutus", ""),
+        version: `V${kind.match(/\d/)?.[0] ?? ""}`,
       };
     } else {
       script = fromNativeScript(deserializeNativeScript(bytes));
