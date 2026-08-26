@@ -1,23 +1,25 @@
-# This workflow will publish the package to NPM when a release is created
+# Publish to NPM from the Actions tab (Run workflow), not from a GitHub Release.
 # For more information see: https://docs.github.com/en/actions/publishing-packages/publishing-nodejs-packages
 
 name: Publish Package to NPM
 
 on:
-  release:
-    types: [created]
+  workflow_dispatch:
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 24
           registry-url: https://registry.npmjs.org/
+
+      - name: Show package version
+        run: node -p "'Publishing @meshsdk/provider@' + require('./package.json').version"
 
       - name: Install dependencies
         run: npm install
