@@ -40,10 +40,79 @@ import {
 } from "./types";
 import { getAdditionalUtxos, parseAssetUnit, parseHttpError } from "./utils";
 
-export type NexusSupportedNetworks = "mainnet" | "preprod" | "preview";
+/**
+ * The network ids Nexus publishes in its OpenAPI schema — the `enum` on the
+ * `network` query parameter — and what {@link NexusProvider} puts on the wire.
+ */
+export type NexusNetworkId =
+  "CARDANO_MAINNET" | "CARDANO_PREPROD" | "CARDANO_PREVIEW";
+
+/**
+ * Networks accepted by {@link NexusProvider}, in any of the three spellings a
+ * caller is likely to be holding, all normalised to a {@link NexusNetworkId}:
+ *
+ * - `CARDANO_PREVIEW` — the OpenAPI schema enum, shown in the Swagger UI.
+ * - `cardano-preview` — the kebab id used in Nexus's docs prose and dashboard
+ *   (auto-generated API key names look like `cardano-preview`).
+ * - `preview` — the bare name from `@meshsdk/common`'s `Network`, so a network
+ *   already threaded through a Mesh app can be passed straight in.
+ *
+ * Matching is case-insensitive. The bare Mesh name is a convenience of this
+ * provider only: Nexus itself rejects it.
+ */
+export type NexusSupportedNetworks =
+  | NexusNetworkId
+  | "cardano-mainnet"
+  | "cardano-preprod"
+  | "cardano-preview"
+  | "mainnet"
+  | "preprod"
+  | "preview";
 
 const DEFAULT_NEXUS_URL = "https://nexus.gerowallet.io/api";
 const DEFAULT_PAGE_SIZE = 100;
+
+/** Every accepted spelling, mapped to the id Nexus documents on `?network=`. */
+const NEXUS_NETWORKS: Record<NexusSupportedNetworks, NexusNetworkId> = {
+  CARDANO_MAINNET: "CARDANO_MAINNET",
+  CARDANO_PREPROD: "CARDANO_PREPROD",
+  CARDANO_PREVIEW: "CARDANO_PREVIEW",
+  "cardano-mainnet": "CARDANO_MAINNET",
+  "cardano-preprod": "CARDANO_PREPROD",
+  "cardano-preview": "CARDANO_PREVIEW",
+  mainnet: "CARDANO_MAINNET",
+  preprod: "CARDANO_PREPROD",
+  preview: "CARDANO_PREVIEW",
+};
+
+/** The same map keyed for case-insensitive lookup, as Nexus itself matches. */
+const NEXUS_NETWORK_LOOKUP: Record<string, NexusNetworkId> = Object.fromEntries(
+  Object.entries(NEXUS_NETWORKS).map(([alias, id]) => [
+    alias.toLowerCase(),
+    id,
+  ]),
+);
+
+/**
+ * Normalise a caller-supplied network to its {@link NexusNetworkId}.
+ *
+ * Throws rather than falling through: the network is routinely a cast env var
+ * (`process.env.X as NexusSupportedNetworks`), where the compiler checks
+ * nothing. Left unvalidated, a typo or a non-Cardano id silently drops the
+ * `?network=` param and the request quietly reads whichever chain the server
+ * defaults to — a wrong answer is worse than a failed construction.
+ */
+const toNexusNetworkId = (network: string): NexusNetworkId => {
+  const id = NEXUS_NETWORK_LOOKUP[network.toLowerCase()];
+  if (id === undefined) {
+    throw new Error(
+      `NexusProvider: unsupported network "${network}". Expected one of ` +
+        `CARDANO_MAINNET, CARDANO_PREPROD, CARDANO_PREVIEW ` +
+        `(the kebab-case and bare Mesh spellings are accepted too).`,
+    );
+  }
+  return id;
+};
 
 /**
  * Nexus is Gero's Cardano data API (https://nexus.gerowallet.io). It exposes
@@ -57,15 +126,25 @@ const DEFAULT_PAGE_SIZE = 100;
  * // hosted instance, API key is network-scoped
  * const provider = new NexusProvider('<Your-API-Key>');
  *
+ * // hosted instance, network named explicitly (must match the key's network).
+ * // The schema id, the dashboard's kebab id, and Mesh's bare name all work.
+ * const provider = new NexusProvider('<Your-API-Key>', 'CARDANO_PREPROD');
+ * const provider = new NexusProvider('<Your-API-Key>', 'cardano-preprod');
+ * const provider = new NexusProvider('<Your-API-Key>', 'preprod');
+ *
  * // self-hosted instance (include the `/api` path segment)
- * const provider = new NexusProvider('https://my-nexus.example.com/api');
+ * const provider = new NexusProvider('https://my-nexus.example.com/api', undefined, 'CARDANO_PREVIEW');
  * ```
+ *
+ * When a network is named it goes on every request as `?network=`. Leave it
+ * unset against the hosted instance to let the API key's own network decide —
+ * naming a network that disagrees with the key is a 400.
  */
 export class NexusProvider
   implements IFetcher, IListener, ISubmitter, IEvaluator
 {
   private readonly _axiosInstance: AxiosInstance;
-  private readonly _network: NexusSupportedNetworks;
+  private readonly _network: NexusNetworkId;
 
   /**
    * If you are using a privately hosted Nexus instance, pass its base URL
@@ -73,7 +152,9 @@ export class NexusProvider
    * instance serves.
    * @param baseUrl The base URL of the instance, e.g. `https://host/api`.
    * @param apiKey Optional API key sent as the `X-Api-Key` header.
-   * @param network Optional network the instance serves. Default is `mainnet`.
+   * @param network Optional network the instance serves, sent as `?network=`.
+   * Omit it and the server decides: from the API key if one is set, otherwise
+   * preprod. Handle resolution treats an omitted network as `mainnet`.
    */
   constructor(
     baseUrl: string,
@@ -83,9 +164,12 @@ export class NexusProvider
 
   /**
    * If you are using the hosted Nexus instance, pass your API key. The key is
-   * network-scoped, so the network is derived from the key server-side.
+   * network-scoped, so the network is derived from the key server-side and
+   * naming one here is optional.
    * @param apiKey Your Nexus API key.
-   * @param network Optional network hint used for handle resolution. Default `mainnet`.
+   * @param network Optional network, sent as `?network=` and used for handle
+   * resolution. Must match the API key's own network or the request is a 400.
+   * Handle resolution treats an omitted network as `mainnet`.
    */
   constructor(apiKey: string, network?: NexusSupportedNetworks);
 
@@ -95,21 +179,28 @@ export class NexusProvider
       typeof first === "string" &&
       (first.startsWith("http") || first.startsWith("/"));
 
-    if (isUrl) {
-      const apiKey = typeof args[1] === "string" ? args[1] : undefined;
-      this._network = (args[2] as NexusSupportedNetworks) ?? "mainnet";
-      this._axiosInstance = axios.create({
-        baseURL: first,
-        headers: apiKey ? { "X-Api-Key": apiKey } : undefined,
-      });
-    } else {
-      const apiKey = first;
-      this._network = (args[1] as NexusSupportedNetworks) ?? "mainnet";
-      this._axiosInstance = axios.create({
-        baseURL: DEFAULT_NEXUS_URL,
-        headers: { "X-Api-Key": apiKey },
-      });
-    }
+    const baseURL = isUrl ? first : DEFAULT_NEXUS_URL;
+    const apiKey = isUrl
+      ? typeof args[1] === "string"
+        ? args[1]
+        : undefined
+      : first;
+    const network = (isUrl ? args[2] : args[1]) as string | undefined;
+    const networkId =
+      network === undefined ? undefined : toNexusNetworkId(network);
+
+    this._network = networkId ?? "CARDANO_MAINNET";
+
+    this._axiosInstance = axios.create({
+      baseURL,
+      headers: apiKey ? { "X-Api-Key": apiKey } : undefined,
+      // Sent on every request so unauthenticated / self-hosted instances
+      // (which otherwise default to preprod server-side) query the right
+      // chain. Only sent when the caller named a network: an API key is
+      // itself network-scoped, and a redundant-but-mismatched hint is a
+      // 400, so an omitted network must stay omitted on the wire.
+      params: networkId ? { network: networkId } : undefined,
+    });
   }
 
   /**
@@ -419,7 +510,7 @@ export class NexusProvider
   }
 
   async fetchHandle(handle: string): Promise<AssetMetadata> {
-    if (this._network !== "mainnet") {
+    if (this._network !== "CARDANO_MAINNET") {
       throw new Error(
         "Does not support fetching addresses by handle on non-mainnet networks.",
       );
@@ -435,7 +526,7 @@ export class NexusProvider
   }
 
   async fetchHandleAddress(handle: string): Promise<string> {
-    if (this._network !== "mainnet") {
+    if (this._network !== "CARDANO_MAINNET") {
       throw new Error(
         "Does not support fetching addresses by handle on non-mainnet networks.",
       );
