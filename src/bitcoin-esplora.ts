@@ -4,7 +4,6 @@ import {
   BitcoinTxInfo,
   BitcoinTxStatus,
   BitcoinUTxO,
-  IBitcoinProvider,
 } from "./types/bitcoin";
 
 export type BlockstreamNetwork = "mainnet" | "testnet";
@@ -20,8 +19,9 @@ type EsploraClientOptions = {
 
 /**
  * Shared Esplora HTTP client. Not part of the public package surface.
+ * Public providers implement `IBitcoinProvider`; this base only supplies the HTTP methods.
  */
-export class EsploraBitcoinClient implements IBitcoinProvider {
+export class EsploraBitcoinClient {
   private readonly name: string;
   private readonly baseUrl: string;
   private readonly getHeaders: () => Promise<EsploraHeaders>;
@@ -66,11 +66,11 @@ export class EsploraBitcoinClient implements IBitcoinProvider {
     return res.json() as Promise<T>;
   }
 
-  fetchAddressInfo(address: string): Promise<BitcoinAddressInfo> {
+  async fetchAddressInfo(address: string): Promise<BitcoinAddressInfo> {
     return this.get(`/address/${address}`);
   }
 
-  fetchAddressUTxOs(address: string): Promise<BitcoinUTxO[]> {
+  async fetchAddressUTxOs(address: string): Promise<BitcoinUTxO[]> {
     return this.get(`/address/${address}/utxo`);
   }
 
@@ -86,8 +86,7 @@ export class EsploraBitcoinClient implements IBitcoinProvider {
         spent: outspends[index]?.spent ?? false,
       }))
       .filter(
-        ({ index, spent }) =>
-          !spent && (vout === undefined || index === vout),
+        ({ index, spent }) => !spent && (vout === undefined || index === vout),
       )
       .map(({ index, out }) => ({
         txid,
@@ -97,7 +96,7 @@ export class EsploraBitcoinClient implements IBitcoinProvider {
       }));
   }
 
-  fetchAddressTxs(
+  async fetchAddressTxs(
     address: string,
     lastSeenTxid?: string,
   ): Promise<BitcoinTxInfo[]> {
@@ -105,7 +104,7 @@ export class EsploraBitcoinClient implements IBitcoinProvider {
     return this.get(`/address/${address}${suffix}`);
   }
 
-  fetchTxInfo(txid: string): Promise<BitcoinTxStatus> {
+  async fetchTxInfo(txid: string): Promise<BitcoinTxStatus> {
     return this.get(`/tx/${txid}/status`);
   }
 
@@ -123,15 +122,15 @@ export class EsploraBitcoinClient implements IBitcoinProvider {
     return rate;
   }
 
-  fetchScriptInfo(hash: string): Promise<BitcoinScriptInfo> {
+  async fetchScriptInfo(hash: string): Promise<BitcoinScriptInfo> {
     return this.get(`/scripthash/${hash}`);
   }
 
-  fetchScriptUTxOs(hash: string): Promise<BitcoinUTxO[]> {
+  async fetchScriptUTxOs(hash: string): Promise<BitcoinUTxO[]> {
     return this.get(`/scripthash/${hash}/utxo`);
   }
 
-  fetchScriptTxs(
+  async fetchScriptTxs(
     hash: string,
     lastSeenTxid?: string,
   ): Promise<BitcoinTxInfo[]> {
