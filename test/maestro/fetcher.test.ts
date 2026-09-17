@@ -1,15 +1,18 @@
-import { MaestroProvider } from "@meshsdk/core";
+import { MaestroProvider } from "@meshsdk/provider";
 
-const apiKey = process.env.MAESTRO_API_KEY!;
-const provider = new MaestroProvider({ apiKey, network: "Preprod" });
+describe("MaestroProvider", () => {
+  const provider = new MaestroProvider({
+    apiKey: "unused",
+    network: "Preprod",
+  });
 
-describe("maestro fetcher endpoint test", () => {
-  it("should fetch cost models", async () => {
-    const costModels = await provider.fetchCostModels();
-    expect(costModels).toBeDefined();
-    expect(Array.isArray(costModels)).toBe(true);
-    expect(costModels.length).toBeGreaterThan(0);
-    expect(Array.isArray(costModels[0])).toBe(true);
-    expect(costModels[0].length).toBeGreaterThan(0);
+  it("still accepts constructor params", () => {
+    expect(provider).toBeInstanceOf(MaestroProvider);
+  });
+
+  it("throws that Maestro is no longer supported", async () => {
+    await expect(provider.fetchCostModels()).rejects.toThrow(
+      /no longer supported/,
+    );
   });
 });

@@ -9,144 +9,100 @@ import {
 
 export type MaestroBitcoinNetwork = "mainnet" | "testnet";
 
-interface MaestroBitcoinConfig {
+export interface MaestroBitcoinConfig {
   apiKey: string;
   network: MaestroBitcoinNetwork;
 }
 
-const BASE_URLS: Record<MaestroBitcoinNetwork, string> = {
-  mainnet: "https://xbt-mainnet.gomaestro-api.org/v0/esplora",
-  testnet: "https://xbt-testnet.gomaestro-api.org/v0/esplora",
-};
+const MAESTRO_BITCOIN_UNSUPPORTED =
+  "Maestro Bitcoin is no longer supported and will be removed in a later version. Use BlockstreamBitcoinProvider instead.";
+
+function maestroBitcoinUnsupported(): never {
+  throw new Error(MAESTRO_BITCOIN_UNSUPPORTED);
+}
 
 /**
- * Bitcoin provider backed by the Maestro Esplora-compatible API.
- * Requires a Maestro API key (https://docs.gomaestro.org/).
- * Implements `IBitcoinProvider` (structurally compatible with
- * `IBitcoinProvider` from `@meshsdk/wallet`).
- *
- * @example
- * ```ts
- * import { MaestroBitcoinProvider } from "@meshsdk/provider";
- * import { BitcoinHeadlessWallet } from "@meshsdk/wallet";
- *
- * const provider = new MaestroBitcoinProvider({
- *   apiKey: "your-maestro-api-key",
- *   network: "mainnet",
- * });
- * const wallet = await BitcoinHeadlessWallet.fromMnemonic({
- *   network: "Mainnet",
- *   mnemonic: [...],
- *   provider,
- * });
- * ```
+ * @deprecated Maestro Bitcoin is no longer supported and will be removed in a later version.
  */
 export class MaestroBitcoinProvider implements IBitcoinProvider {
-  private readonly baseUrl: string;
-  private readonly headers: Record<string, string>;
+  /**
+   * @deprecated Maestro Bitcoin is no longer supported. Constructor params are kept for compatibility and will be removed in a later version.
+   */
+  constructor(_config: MaestroBitcoinConfig) {}
 
-  constructor({ apiKey, network}: MaestroBitcoinConfig) {
-    this.baseUrl = BASE_URLS[network];
-    this.headers = { "api-key": apiKey };
+  /**
+   * @deprecated Maestro Bitcoin is no longer supported.
+   */
+  async fetchAddressInfo(_address: string): Promise<BitcoinAddressInfo> {
+    return maestroBitcoinUnsupported();
   }
 
-  private async get<T>(path: string, query?: Record<string, string>): Promise<T> {
-    const url = new URL(`${this.baseUrl}${path}`);
-    if (query) {
-      for (const [k, v] of Object.entries(query)) {
-        url.searchParams.set(k, v);
-      }
-    }
-    const res = await fetch(url.toString(), { headers: this.headers });
-    if (!res.ok) {
-      throw new Error(
-        `[MaestroBitcoinProvider] GET ${path} failed: ${res.status} ${res.statusText}`,
-      );
-    }
-    return res.json() as Promise<T>;
+  /**
+   * @deprecated Maestro Bitcoin is no longer supported.
+   */
+  async fetchAddressUTxOs(_address: string): Promise<BitcoinUTxO[]> {
+    return maestroBitcoinUnsupported();
   }
 
-
-  fetchAddressInfo(address: string): Promise<BitcoinAddressInfo> {
-    return this.get(`/address/${address}`);
+  /**
+   * @deprecated Maestro Bitcoin is no longer supported.
+   */
+  async fetchUTxO(_txid: string, _vout?: number): Promise<BitcoinUTxO[]> {
+    return maestroBitcoinUnsupported();
   }
 
-  fetchAddressUTxOs(address: string): Promise<BitcoinUTxO[]> {
-    return this.get(`/address/${address}/utxo`);
-  }
-
-  async fetchUTxO(txid: string, vout?: number): Promise<BitcoinUTxO[]> {
-    const [tx, outspends] = await Promise.all([
-      this.get<BitcoinTxInfo>(`/tx/${txid}`),
-      this.get<{ spent: boolean }[]>(`/tx/${txid}/outspends`),
-    ]);
-    return tx.vout
-      .map((out, index) => ({ index, out, spent: outspends[index]?.spent ?? false }))
-      .filter(({ index, spent }) => !spent && (vout === undefined || index === vout))
-      .map(({ index, out }) => ({
-        txid,
-        vout: index,
-        value: out.value,
-        status: tx.status,
-      }));
-  }
-
-  fetchAddressTxs(
-    address: string,
-    lastSeenTxid?: string,
+  /**
+   * @deprecated Maestro Bitcoin is no longer supported.
+   */
+  async fetchAddressTxs(
+    _address: string,
+    _lastSeenTxid?: string,
   ): Promise<BitcoinTxInfo[]> {
-    // Maestro uses `after_txid` as the pagination query param (Esplora-compatible).
-    return this.get(
-      `/address/${address}/txs`,
-      lastSeenTxid ? { after_txid: lastSeenTxid } : undefined,
-    );
+    return maestroBitcoinUnsupported();
   }
 
-  fetchTxInfo(txid: string): Promise<BitcoinTxStatus> {
-    return this.get(`/tx/${txid}/status`);
+  /**
+   * @deprecated Maestro Bitcoin is no longer supported.
+   */
+  async fetchTxInfo(_txid: string): Promise<BitcoinTxStatus> {
+    return maestroBitcoinUnsupported();
   }
 
-  async fetchFeeEstimates(blocks: number): Promise<number> {
-    const estimates = await this.get<Record<string, number>>("/fee-estimates");
-    const rate = estimates[String(blocks)];
-    if (rate === undefined) {
-      const available = Object.keys(estimates)
-        .map(Number)
-        .sort((a, b) => a - b);
-      const closest = available.find((t) => t >= blocks) ?? available[available.length - 1];
-      return closest !== undefined ? (estimates[String(closest)] ?? 2) : 2;
-    }
-    return rate;
+  /**
+   * @deprecated Maestro Bitcoin is no longer supported.
+   */
+  async fetchFeeEstimates(_blocks: number): Promise<number> {
+    return maestroBitcoinUnsupported();
   }
 
-  fetchScriptInfo(hash: string): Promise<BitcoinScriptInfo> {
-    return this.get(`/scripthash/${hash}`);
+  /**
+   * @deprecated Maestro Bitcoin is no longer supported.
+   */
+  async fetchScriptInfo(_hash: string): Promise<BitcoinScriptInfo> {
+    return maestroBitcoinUnsupported();
   }
 
-  fetchScriptUTxOs(hash: string): Promise<BitcoinUTxO[]> {
-    return this.get(`/scripthash/${hash}/utxo`);
+  /**
+   * @deprecated Maestro Bitcoin is no longer supported.
+   */
+  async fetchScriptUTxOs(_hash: string): Promise<BitcoinUTxO[]> {
+    return maestroBitcoinUnsupported();
   }
 
-  fetchScriptTxs(
-    hash: string,
-    lastSeenTxid?: string,
+  /**
+   * @deprecated Maestro Bitcoin is no longer supported.
+   */
+  async fetchScriptTxs(
+    _hash: string,
+    _lastSeenTxid?: string,
   ): Promise<BitcoinTxInfo[]> {
-    return this.get(
-      `/scripthash/${hash}/txs`,
-      lastSeenTxid ? { after_txid: lastSeenTxid } : undefined,
-    );
+    return maestroBitcoinUnsupported();
   }
 
-  async submitTx(txHex: string): Promise<string> {
-    const res = await fetch(`${this.baseUrl}/tx`, {
-      method: "POST",
-      headers: { ...this.headers, "Content-Type": "text/plain" },
-      body: txHex,
-    });
-    if (!res.ok) {
-      const body = await res.text();
-      throw new Error(`[MaestroBitcoinProvider] submitTx failed: ${body}`);
-    }
-    return res.text(); // returns txid as plain text
+  /**
+   * @deprecated Maestro Bitcoin is no longer supported.
+   */
+  async submitTx(_txHex: string): Promise<string> {
+    return maestroBitcoinUnsupported();
   }
 }
