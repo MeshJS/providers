@@ -1,4 +1,8 @@
-import { EsploraBitcoinClient, type BlockstreamNetwork } from "./bitcoin-esplora";
+import {
+  EsploraBitcoinClient,
+  type BlockstreamNetwork,
+} from "./bitcoin-esplora";
+import { IBitcoinProvider } from "./types/bitcoin";
 
 export type { BlockstreamNetwork };
 
@@ -24,7 +28,10 @@ const BASE_URLS: Record<BlockstreamNetwork, string> = {
  * });
  * ```
  */
-export class BlockstreamBitcoinProvider extends EsploraBitcoinClient {
+export class BlockstreamBitcoinProvider
+  extends EsploraBitcoinClient
+  implements IBitcoinProvider
+{
   constructor(network: BlockstreamNetwork) {
     super({
       name: "BlockstreamBitcoinProvider",

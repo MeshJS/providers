@@ -2,6 +2,7 @@ import {
   EsploraBitcoinClient,
   type BlockstreamNetwork,
 } from "./bitcoin-esplora";
+import { IBitcoinProvider } from "./types/bitcoin";
 
 const TOKEN_URL =
   "https://login.blockstream.com/realms/blockstream-public/protocol/openid-connect/token";
@@ -42,7 +43,10 @@ type TokenResponse = {
  * });
  * ```
  */
-export class BlockstreamEnterpriseBitcoinProvider extends EsploraBitcoinClient {
+export class BlockstreamEnterpriseBitcoinProvider
+  extends EsploraBitcoinClient
+  implements IBitcoinProvider
+{
   private accessToken?: string;
   private tokenExpiresAt = 0;
   private tokenRequest?: Promise<string>;
