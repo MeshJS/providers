@@ -9,5 +9,6 @@ export * from "./yaci";
 export * from "./offline";
 export * from "./kupo";
 export * from "./bitcoin-blockstream";
+export * from "./bitcoin-blockstream-enterprise";
 export * from "./bitcoin-maestro";
 export * from "./types/bitcoin";
