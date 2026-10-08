@@ -138,3 +138,111 @@ describe("NexusProvider fetcher", () => {
     expect(hash).toBe("ee".repeat(32));
   });
 });
+
+describe("NexusProvider fetchCostModels", () => {
+  // Distinct values per language and index, so any misplaced value shows.
+  const inLedgerOrder = (length: number, base: number) =>
+    Array.from({ length }, (_, i) => base + i);
+  const V1 = inLedgerOrder(166, 1_000);
+  const V2 = inLedgerOrder(175, 2_000);
+  const V3 = inLedgerOrder(350, 3_000);
+
+  /** A keyed cost model as Nexus serves it in `costModels`. */
+  const keyed = (values: number[], width: number) =>
+    Object.fromEntries(
+      values.map((value, i) => [String(i).padStart(width, "0"), value]),
+    );
+
+  it("prefers the ordered costModelsRaw arrays", async () => {
+    const provider = makeProvider(async (url: string) => {
+      expect(url).toBe("epoch/latest/parameters");
+      return {
+        status: 200,
+        data: {
+          // Different values, so a read of this map instead would show.
+          costModels: {
+            PlutusV1: keyed(inLedgerOrder(166, 9_000), 3),
+            PlutusV2: keyed(inLedgerOrder(175, 9_000), 3),
+            PlutusV3: keyed(inLedgerOrder(350, 9_000), 3),
+          },
+          costModelsRaw: { PlutusV1: V1, PlutusV2: V2, PlutusV3: V3 },
+        },
+      };
+    });
+
+    expect(await provider.fetchCostModels()).toEqual([V1, V2, V3]);
+  });
+
+  it("reads a specific epoch from epoch/params", async () => {
+    const provider = makeProvider(async (url: string) => {
+      expect(url).toBe("epoch/params?epoch_no=575");
+      return {
+        status: 200,
+        data: { costModelsRaw: { PlutusV1: V1, PlutusV2: V2, PlutusV3: V3 } },
+      };
+    });
+
+    expect(await provider.fetchCostModels(575)).toEqual([V1, V2, V3]);
+  });
+
+  it('orders zero-padded "000".."349" keys by position when costModelsRaw is absent', async () => {
+    const costModels = {
+      PlutusV1: keyed(V1, 3),
+      PlutusV2: keyed(V2, 3),
+      PlutusV3: keyed(V3, 3),
+    };
+    // The fixture reproduces the 2026-10-08 failure: JavaScript iterates
+    // "100".."349" before "000".."099", so insertion order is gone.
+    expect(Object.values(costModels.PlutusV3)).not.toEqual(V3);
+
+    const provider = makeProvider(async () => ({
+      status: 200,
+      data: { costModels },
+    }));
+
+    expect(await provider.fetchCostModels()).toEqual([V1, V2, V3]);
+  });
+
+  it('orders plain "0".."n-1" keys when costModelsRaw is absent', async () => {
+    const provider = makeProvider(async () => ({
+      status: 200,
+      data: {
+        costModels: {
+          PlutusV1: keyed(V1, 0),
+          PlutusV2: keyed(V2, 0),
+          PlutusV3: keyed(V3, 0),
+        },
+      },
+    }));
+
+    expect(await provider.fetchCostModels()).toEqual([V1, V2, V3]);
+  });
+
+  it("throws rather than guess an order when the keys are not 0..n-1", async () => {
+    const { "042": _dropped, ...withGap } = keyed(V3, 3);
+    const provider = makeProvider(async () => ({
+      status: 200,
+      data: {
+        costModels: {
+          PlutusV1: keyed(V1, 3),
+          PlutusV2: keyed(V2, 3),
+          PlutusV3: withGap,
+        },
+      },
+    }));
+
+    await expect(provider.fetchCostModels()).rejects.toThrow(
+      /costModels\.PlutusV3 key .* ledger order is unknown/,
+    );
+  });
+
+  it("keeps each language in its position when one is missing", async () => {
+    const provider = makeProvider(async () => ({
+      status: 200,
+      data: { costModelsRaw: { PlutusV1: V1, PlutusV3: V3 } },
+    }));
+
+    // Mesh reads [V1, V2, V3] by position: V3 must not slide into V2's slot.
+    expect(await provider.fetchCostModels()).toEqual([V1]);
+  });
+});
