@@ -114,6 +114,70 @@ const toNexusNetworkId = (network: string): NexusNetworkId => {
   return id;
 };
 
+/** Plutus languages in the positions Mesh reads them from: `[V1, V2, V3]`. */
+const PLUTUS_LANGUAGES = ["PlutusV1", "PlutusV2", "PlutusV3"] as const;
+
+/**
+ * One language's keyed cost model as an array, each value placed at the index
+ * its key names.
+ *
+ * `Object.values()` cannot be used here. JavaScript iterates integer-like keys
+ * ("0", "100") in ascending order ahead of every other string key, so a map
+ * keyed "000".."349" comes back as "100".."349" followed by "000".."099": the
+ * values land in the wrong slots and the script integrity hash no longer
+ * matches the one the node computes. Parsing the key reads "000" and "0" alike.
+ *
+ * Throws unless the keys are exactly 0..n-1. A value whose ledger position is
+ * unknown cannot be placed, and a guessed order only fails later, at the node.
+ */
+const orderKeyedCostModel = (
+  language: string,
+  model: Record<string, number | string>,
+): number[] => {
+  const entries = Object.entries(model);
+  const ordered: number[] = new Array(entries.length);
+  for (const [key, value] of entries) {
+    const index = /^\d+$/.test(key) ? Number(key) : Number.NaN;
+    // n keys in n distinct slots below n leave no gap, so this one check also
+    // proves the array is complete.
+    if (!(index < ordered.length) || ordered[index] !== undefined) {
+      throw new Error(
+        `NexusProvider: costModels.${language} key "${key}" is not a ` +
+          `position in 0..${ordered.length - 1}, so its ledger order is unknown.`,
+      );
+    }
+    ordered[index] = Number(value);
+  }
+  return ordered;
+};
+
+/**
+ * Mesh's cost models, `[V1, V2, V3]` by position, from a Nexus protocol
+ * parameters body.
+ *
+ * `costModelsRaw` carries each language as an array already in ledger order,
+ * so it is preferred. The keyed `costModels` object is the fallback for a
+ * response without it.
+ */
+const toCostModelLists = (data: any): number[][] => {
+  const lists: number[][] = [];
+  for (const language of PLUTUS_LANGUAGES) {
+    const raw = data?.costModelsRaw?.[language];
+    const keyed = data?.costModels?.[language];
+    if (Array.isArray(raw)) {
+      lists.push(raw.map(Number));
+    } else if (keyed != null) {
+      lists.push(orderKeyedCostModel(language, keyed));
+    } else {
+      // Mesh reads each language by its position, so skipping a missing one
+      // would move every later language into the wrong slot. Stop instead
+      // (V3 is absent before Conway); Mesh uses its defaults for the rest.
+      break;
+    }
+  }
+  return lists;
+};
+
 /**
  * Nexus is Gero's Cardano data API (https://nexus.gerowallet.io). It exposes
  * a Blockfrost/Koios-style REST surface for querying chain data and submitting
@@ -543,6 +607,7 @@ export class NexusProvider
   }
 
   async fetchCostModels(epoch?: number): Promise<number[][]> {
+    let params: any;
     try {
       const url =
         epoch !== undefined && !isNaN(epoch)
@@ -550,19 +615,14 @@ export class NexusProvider
           : `epoch/latest/parameters`;
       const { data, status } = await this._axiosInstance.get(url);
 
-      if (status === 200 || status === 202) {
-        const costModels = data.costModels ?? {};
-        return [costModels.PlutusV1, costModels.PlutusV2, costModels.PlutusV3]
-          .filter((model) => model != null)
-          .map((model) =>
-            Object.values(model as Record<string, number>).map(Number),
-          );
-      }
-
-      throw parseHttpError(data);
+      if (status !== 200 && status !== 202) throw parseHttpError(data);
+      params = data;
     } catch (error) {
       throw parseHttpError(error);
     }
+    // Mapped outside the try: parseHttpError would reduce an ordering error
+    // to "{}".
+    return toCostModelLists(params);
   }
 
   async fetchProtocolParameters(epoch = Number.NaN): Promise<Protocol> {
