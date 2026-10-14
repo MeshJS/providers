@@ -292,12 +292,19 @@ export class IagonInsightProvider
   async fetchUTxOs(hash: string, index?: number): Promise<UTxO[]> {
     try {
       const data = await this.request({ url: this.bf(`txs/${hash}/utxos`) });
-      // a collateral return is listed with the outputs, but only exists when
-      // the scripts failed, and then it is the only output
-      const outputs = (data.outputs as IagonInsightUTxO[]).filter(
-        (o) =>
-          !o.collateral && (index === undefined || o.output_index === index),
-      );
+      let outputs = data.outputs as IagonInsightUTxO[];
+      // A collateral return is listed with the outputs. When the scripts
+      // failed (valid_contract false) it is the only output and the real
+      // UTxO, so it is kept. Otherwise it is not spendable and is dropped.
+      if (outputs.some((o) => o.collateral)) {
+        const tx = await this.request({ url: this.bf(`txs/${hash}`) });
+        if (tx.valid_contract !== false) {
+          outputs = outputs.filter((o) => !o.collateral);
+        }
+      }
+      if (index !== undefined) {
+        outputs = outputs.filter((o) => o.output_index === index);
+      }
       return await Promise.all(outputs.map((o) => this.toUTxO(o, hash)));
     } catch (error) {
       throw parseHttpError(error);

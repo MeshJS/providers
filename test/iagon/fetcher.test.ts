@@ -136,14 +136,37 @@ describe("IagonInsightProvider fetcher", () => {
   });
 
   it("does not hand out the collateral return of a valid transaction", async () => {
-    const provider = makeProvider(async () => ({
-      data: {
-        inputs: [],
-        outputs: [utxo(0), utxo(1), { ...utxo(2), collateral: true }],
-      },
+    const provider = makeProvider(async (config) => ({
+      data: config.url.endsWith("/utxos")
+        ? {
+            inputs: [],
+            outputs: [utxo(0), utxo(1), { ...utxo(2), collateral: true }],
+          }
+        : { valid_contract: true },
     }));
 
     const utxos = await provider.fetchUTxOs("aa".repeat(32));
     expect(utxos.map((u) => u.input.outputIndex)).toEqual([0, 1]);
+  });
+
+  it("keeps the collateral return of a transaction whose scripts failed", async () => {
+    const provider = makeProvider(async (config) => ({
+      data: config.url.endsWith("/utxos")
+        ? { inputs: [], outputs: [{ ...utxo(0), collateral: true }] }
+        : { valid_contract: false },
+    }));
+
+    const utxos = await provider.fetchUTxOs("aa".repeat(32));
+    expect(utxos.map((u) => u.input.outputIndex)).toEqual([0]);
+    expect(await provider.fetchUTxOs("aa".repeat(32), 0)).toHaveLength(1);
+  });
+
+  it("does not look up the transaction when no output is collateral", async () => {
+    const provider = makeProvider(async () => ({
+      data: { inputs: [], outputs: [utxo(0), utxo(1)] },
+    }));
+
+    await provider.fetchUTxOs("aa".repeat(32), 1);
+    expect((provider as any)._axiosInstance.request).toHaveBeenCalledTimes(1);
   });
 });
