@@ -530,7 +530,11 @@ export class YaciProvider
         },
       );
 
-      if (status === 202) {
+      if (
+        (status === 200 || status === 202) &&
+        typeof data === "string" &&
+        /^[0-9a-f]{64}$/i.test(data)
+      ) {
         return data;
       }
 
@@ -561,7 +565,13 @@ export class YaciProvider
         },
       );
 
-      if (status === 202 && data.result.EvaluationResult) {
+      const evaluation = data?.result?.EvaluationResult;
+      if (
+        (status === 200 || status === 202) &&
+        evaluation &&
+        typeof evaluation === "object" &&
+        !Array.isArray(evaluation)
+      ) {
         const tagMap: { [key: string]: RedeemerTagType } = {
           spend: "SPEND",
           mint: "MINT",
@@ -572,9 +582,21 @@ export class YaciProvider
         };
         const result: Omit<Action, "data">[] = [];
 
-        Object.keys(data.result.EvaluationResult).forEach((key) => {
+        Object.keys(evaluation).forEach((key) => {
           const [tagKey, index] = key.split(":");
-          const { memory, steps } = data.result.EvaluationResult[key];
+          const { memory, steps } = evaluation[key] ?? {};
+          if (
+            !/^[a-z]+:\d+$/.test(key) ||
+            !Object.prototype.hasOwnProperty.call(tagMap, tagKey!) ||
+            !Number.isSafeInteger(Number(index)) ||
+            !Number.isSafeInteger(memory) ||
+            memory < 0 ||
+            !Number.isSafeInteger(steps) ||
+            steps < 0
+          ) {
+            throw parseHttpError(data);
+          }
+
           result.push({
             tag: tagMap[tagKey!]!,
             index: Number(index),
