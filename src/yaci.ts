@@ -393,8 +393,26 @@ export class YaciProvider
     }
   }
 
+  /**
+   * Fetch the raw Plutus cost models for an epoch.
+   * @param epoch Optional - The epoch to fetch cost models for; defaults to latest
+   * @returns Ordered parameter arrays for Plutus V1, V2, and V3
+   * @throws If any model is missing, empty, or contains values other than safe integers
+   */
   async fetchCostModels(epoch?: number): Promise<number[][]> {
-    throw new Error("Method not implemented.");
+    const parameters = await this.get(`epochs/${epoch ?? "latest"}/parameters`);
+
+    return ["PlutusV1", "PlutusV2", "PlutusV3"].map((language) => {
+      const model = parameters?.cost_models_raw?.[language];
+      if (
+        !Array.isArray(model) ||
+        model.length === 0 ||
+        !model.every((value: unknown) => Number.isSafeInteger(value))
+      ) {
+        throw new Error(`Yaci returned no valid cost model for ${language}`);
+      }
+      return model;
+    });
   }
 
   /**
