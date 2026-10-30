@@ -7,6 +7,7 @@ import {
   AssetMetadata,
   BlockInfo,
   castProtocol,
+  DEFAULT_FETCHER_OPTIONS,
   fromUTF8,
   GovernanceProposalInfo,
   IEvaluator,
@@ -201,18 +202,43 @@ export class YaciProvider
   }
 
   /**
-   * Unimplemented - open for contribution
-   *
-   * Transactions for an address. The `TransactionInfo` would only return the `hash`, `inputs`, and `outputs`.
-   * @param address - The address to fetch transactions for
-   * @returns - partial TransactionInfo
+   * Fetches transactions for a given address using the Blockfrost-compatible
+   * `/addresses/{address}/transactions` endpoint, then resolves full
+   * `TransactionInfo` via `/txs/{hash}` for each transaction.
+   * @param address - The Cardano address to query
+   * @param option - Pagination options (maxPage, order)
    */
   async fetchAddressTxs(
     address: string,
-    option: IFetcherOptions = { maxPage: 100, order: "desc" },
+    option: IFetcherOptions = DEFAULT_FETCHER_OPTIONS,
   ): Promise<TransactionInfo[]> {
-    // open for contribution, see blockfrost.ts for reference
-    throw new Error("Method not implemented.");
+    const pageSize = 100;
+    const results: TransactionInfo[] = [];
+
+    for (let page = 1; page <= (option.maxPage ?? 100); page++) {
+      let hashes: string[];
+      try {
+        const { data, status } = await this._axiosInstance.get(
+          `addresses/${address}/transactions?page=${page}&count=${pageSize}&order=${option.order}`,
+        );
+        if (status !== 200 || !Array.isArray(data)) break;
+        hashes = data.map((entry: any) => entry.tx_hash as string);
+        if (hashes.length === 0) break;
+      } catch {
+        break;
+      }
+
+      const txInfos = await Promise.allSettled(
+        hashes.map((h) => this.fetchTxInfo(h)),
+      );
+      for (const result of txInfos) {
+        if (result.status === "fulfilled") results.push(result.value);
+      }
+
+      if (hashes.length < pageSize) break;
+    }
+
+    return results;
   }
 
   /**
@@ -334,7 +360,11 @@ export class YaciProvider
   }
 
   async fetchHandle(handle: string): Promise<object> {
-    throw new Error("Method not implemented.");
+    // ADA Handles are mainnet-only NFTs. Yaci DevKit is a local devnet tool
+    // and has no handle registry — this method cannot be implemented here.
+    throw new Error(
+      "fetchHandle is not supported by YaciProvider (Yaci DevKit is a local devnet with no ADA Handle registry).",
+    );
   }
 
   async fetchHandleAddress(handle: string): Promise<string> {
@@ -475,18 +505,43 @@ export class YaciProvider
   }
 
   /**
-   * Unimplemented - open for contribution
-   *
-   * Fetches the governance proposal information.
-   * @param txHash The transaction hash of the proposal
-   * @param certIndex The certificate index of the proposal
-   * @returns The governance proposal information
+   * Fetches the governance proposal information using the Blockfrost-compatible
+   * `/governance/proposals/{txHash}/{certIndex}` endpoint.
+   * @param txHash - The transaction hash of the proposal
+   * @param certIndex - The certificate index of the proposal
    */
   async fetchGovernanceProposal(
     txHash: string,
     certIndex: number,
   ): Promise<GovernanceProposalInfo> {
-    throw new Error("Method not implemented");
+    try {
+      const { data, status } = await this._axiosInstance.get(
+        `governance/proposals/${txHash}/${certIndex}`,
+      );
+
+      if (status === 200) {
+        return <GovernanceProposalInfo>{
+          txHash: data.tx_hash,
+          certIndex: data.cert_index,
+          governanceType: data.governance_type,
+          deposit: data.deposit,
+          returnAddress: data.return_address,
+          governanceDescription: JSON.stringify(
+            data.governance_description ?? "",
+          ),
+          ratifiedEpoch: data.ratified_epoch ?? 0,
+          enactedEpoch: data.enacted_epoch ?? 0,
+          droppedEpoch: data.dropped_epoch ?? 0,
+          expiredEpoch: data.expired_epoch ?? 0,
+          expiration: data.expiration ?? 0,
+          metadata: data.metadata ?? {},
+        };
+      }
+
+      throw parseHttpError(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
   }
 
   async get(url: string): Promise<any> {
