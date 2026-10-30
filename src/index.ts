@@ -1,5 +1,6 @@
 export * from "./begin";
 export * from "./blockfrost";
+export * from "./devnet";
 export * from "./iagon";
 export * from "./koios";
 export * from "./maestro";
