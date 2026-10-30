@@ -119,36 +119,70 @@ export class KoiosProvider
   }
 
   /**
-   * Unimplemented - open for contribution, see blockfrost.ts for reference
-   * @param address
+   * Fetches transactions for a given address, paginated by `option.maxPage` pages of 1000 each.
+   * @param address - The address to fetch transactions for
+   * @param option - Pagination options
    */
   async fetchAddressTxs(
     address: string,
     option: IFetcherOptions = DEFAULT_FETCHER_OPTIONS,
   ): Promise<TransactionInfo[]> {
-    try {
-      const { data, status } = await this._axiosInstance.post(`/address_txs`, {
-        _addresses: [address],
-      });
-      if (status === 200 || status == 202) {
-        return data.map((tx: any) => {
-          return <TransactionInfo>{
-            hash: tx.tx_hash,
-            index: 0,
-            block: "",
-            slot: "",
-            fees: "",
-            size: 0,
-            deposit: "",
-            invalidBefore: "",
-            invalidAfter: "",
-          };
-        });
+    const pageSize = 1000;
+    const allHashes: string[] = [];
+    let page = 0;
+
+    while (page < (option.maxPage ?? 100)) {
+      try {
+        const { data, status } = await this._axiosInstance.post(
+          `address_txs`,
+          { _addresses: [address] },
+          { params: { offset: page * pageSize, limit: pageSize, order: option.order } },
+        );
+        if (status !== 200 && status !== 202) break;
+        const hashes: string[] = (data ?? []).map((tx: any) => tx.tx_hash as string);
+        allHashes.push(...hashes);
+        if (hashes.length < pageSize) break;
+        page++;
+      } catch {
+        break;
       }
-      throw parseHttpError(data);
-    } catch (error) {
-      throw parseHttpError(error);
     }
+
+    if (allHashes.length === 0) return [];
+
+    // Koios tx_info accepts up to 1000 hashes per request.
+    const batches: string[][] = [];
+    for (let i = 0; i < allHashes.length; i += 1000) {
+      batches.push(allHashes.slice(i, i + 1000));
+    }
+
+    const results: TransactionInfo[] = [];
+    for (const batch of batches) {
+      try {
+        const { data, status } = await this._axiosInstance.post(`tx_info`, {
+          _tx_hashes: batch,
+        });
+        if (status === 200 || status === 202) {
+          results.push(
+            ...data.map((tx: any) => <TransactionInfo>{
+              block: tx.block_hash ?? "",
+              deposit: tx.deposit?.toString() ?? "0",
+              fees: tx.fee?.toString() ?? "0",
+              hash: tx.tx_hash,
+              index: tx.tx_block_index ?? 0,
+              invalidAfter: tx.invalid_hereafter?.toString() ?? "",
+              invalidBefore: tx.invalid_before?.toString() ?? "",
+              slot: tx.absolute_slot?.toString() ?? "",
+              size: tx.tx_size ?? 0,
+            }),
+          );
+        }
+      } catch {
+        // Skip failed batches rather than aborting entirely.
+      }
+    }
+
+    return results;
   }
 
   /**
@@ -386,8 +420,35 @@ export class KoiosProvider
     }
   }
 
+  /**
+   * Fetches Plutus cost models for a given epoch (defaults to latest).
+   * Returns arrays in [PlutusV1, PlutusV2, PlutusV3] order; versions absent
+   * from the epoch response are omitted.
+   * @param epoch - Optional epoch number; defaults to latest
+   */
   async fetchCostModels(epoch?: number): Promise<number[][]> {
-    throw new Error("Method not implemented.");
+    try {
+      let targetEpoch = epoch;
+      if (targetEpoch === undefined) {
+        const { data: tipData } = await this._axiosInstance.get(`tip`);
+        targetEpoch = tipData[0].epoch_no as number;
+      }
+
+      const { data, status } = await this._axiosInstance.get(
+        `epoch_params?_epoch_no=${targetEpoch}`,
+      );
+
+      if (status === 200 && data[0]?.cost_models) {
+        const cm = data[0].cost_models as Record<string, number[]>;
+        return ["PlutusV1", "PlutusV2", "PlutusV3"]
+          .filter((v) => Array.isArray(cm[v]) && (cm[v] as number[]).length > 0)
+          .map((v) => cm[v] as number[]);
+      }
+
+      throw parseHttpError(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
   }
 
   /**
@@ -453,11 +514,47 @@ export class KoiosProvider
     }
   }
 
+  /**
+   * Fetches a governance proposal for a given transaction hash and certificate index.
+   * @param txHash - The transaction hash of the proposal
+   * @param certIndex - The certificate (proposal) index within the transaction
+   */
   async fetchGovernanceProposal(
     txHash: string,
     certIndex: number,
   ): Promise<GovernanceProposalInfo> {
-    throw new Error("Method not implemented");
+    try {
+      const { data, status } = await this._axiosInstance.get(
+        `proposal_list?_proposal_tx_hash=eq.${txHash}`,
+      );
+
+      if (status === 200 && Array.isArray(data)) {
+        const proposal = data.find((p: any) => p.proposal_index === certIndex);
+        if (!proposal) {
+          throw new Error(
+            `Governance proposal not found: ${txHash}#${certIndex}`,
+          );
+        }
+        return <GovernanceProposalInfo>{
+          txHash: proposal.proposal_tx_hash,
+          certIndex: proposal.proposal_index,
+          governanceType: proposal.proposal_type,
+          deposit: proposal.deposit,
+          returnAddress: proposal.return_address,
+          governanceDescription: proposal.proposal_description ?? "",
+          ratifiedEpoch: proposal.ratified_epoch ?? 0,
+          enactedEpoch: proposal.enacted_epoch ?? 0,
+          droppedEpoch: proposal.dropped_epoch ?? 0,
+          expiredEpoch: proposal.expired_epoch ?? 0,
+          expiration: proposal.expiration ?? 0,
+          metadata: proposal.meta_json ?? {},
+        };
+      }
+
+      throw parseHttpError(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
   }
 
   /**

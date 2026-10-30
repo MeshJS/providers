@@ -11,6 +11,7 @@ import {
   BlockInfo,
   bytesToHex,
   castProtocol,
+  DEFAULT_FETCHER_OPTIONS,
   GovernanceProposalInfo,
   hexToBytes,
   IEvaluator,
@@ -230,11 +231,14 @@ export class U5CProvider
   }
 
   /**
-   * Obtain information about a specific stake account.
-   * @param address - Wallet address to fetch account information
+   * Not available via the utxo-rpc gRPC protocol.
+   * The protocol only supports UTxO queries and transaction submission.
+   * Use a companion HTTP provider (Koios, Blockfrost, etc.) to fetch account info.
    */
-  fetchAccountInfo(address: string): Promise<AccountInfo> {
-    throw new Error("Method not implemented.");
+  fetchAccountInfo(_address: string): Promise<AccountInfo> {
+    throw new Error(
+      "fetchAccountInfo is not supported by U5CProvider: the utxo-rpc gRPC protocol does not expose stake account data. Use a companion HTTP provider such as Koios or Blockfrost.",
+    );
   }
 
   async fetchAddressAssets(
@@ -279,84 +283,88 @@ export class U5CProvider
   }
 
   /**
-   * Unimplemented - open for contribution
-   *
-   * Transactions for an address. The `TransactionInfo` would only return the `hash`, `inputs`, and `outputs`.
-   * @param address - The address to fetch transactions for
-   * @returns - partial TransactionInfo
+   * Not available via the utxo-rpc gRPC protocol.
+   * The protocol only exposes UTxO state — there is no transaction-history API.
+   * Use a companion HTTP provider (Koios, Blockfrost, etc.) to fetch address transactions.
    */
   async fetchAddressTxs(
-    address: string,
-    option: IFetcherOptions = { maxPage: 100, order: "desc" },
+    _address: string,
+    _option: IFetcherOptions = DEFAULT_FETCHER_OPTIONS,
   ): Promise<TransactionInfo[]> {
-    // open for contribution, see blockfrost.ts for reference
-    throw new Error("Method not implemented.");
+    throw new Error(
+      "fetchAddressTxs is not supported by U5CProvider: the utxo-rpc gRPC protocol has no transaction-history endpoint. Use a companion HTTP provider such as Koios or Blockfrost.",
+    );
   }
 
   /**
-   * Unimplemented - open for contribution
-   *
-   * Fetches the asset addresses for a given asset.
-   * @param asset - The asset to fetch addresses for
+   * Not available via the utxo-rpc gRPC protocol.
+   * There is no asset-holder query in the protocol — only UTxO lookups by address/tx-ref.
+   * Use a companion HTTP provider (Koios, Blockfrost, etc.) to resolve asset holders.
    */
   fetchAssetAddresses(
-    asset: string,
+    _asset: string,
   ): Promise<{ address: string; quantity: string }[]> {
-    throw new Error("Method not implemented.");
+    throw new Error(
+      "fetchAssetAddresses is not supported by U5CProvider: the utxo-rpc gRPC protocol has no asset-to-holder query. Use a companion HTTP provider such as Koios or Blockfrost.",
+    );
   }
 
   /**
-   * Unimplemented - open for contribution
-   *
-   * Fetches the metadata for a given asset.
-   * @param asset - The asset to fetch metadata for
+   * Not available via the utxo-rpc gRPC protocol.
+   * Asset metadata (CIP-25 / CIP-68) is off-chain data not exposed by the protocol.
+   * Use a companion HTTP provider (Koios, Blockfrost, etc.) to fetch asset metadata.
    */
-  fetchAssetMetadata(asset: string): Promise<AssetMetadata> {
-    throw new Error("Method not implemented.");
+  fetchAssetMetadata(_asset: string): Promise<AssetMetadata> {
+    throw new Error(
+      "fetchAssetMetadata is not supported by U5CProvider: the utxo-rpc gRPC protocol does not expose asset metadata. Use a companion HTTP provider such as Koios or Blockfrost.",
+    );
   }
 
   /**
-   * Unimplemented - open for contribution
-   *
-   * Fetches the block information for a given block hash.
-   * @param hash - The block hash to fetch block information for
+   * Not available via the utxo-rpc gRPC protocol.
+   * Block metadata (slot, epoch, VRF, etc.) is not part of the utxo-rpc spec.
+   * Use a companion HTTP provider (Koios, Blockfrost, etc.) to fetch block information.
    */
-  fetchBlockInfo(hash: string): Promise<BlockInfo> {
-    throw new Error("Method not implemented.");
+  fetchBlockInfo(_hash: string): Promise<BlockInfo> {
+    throw new Error(
+      "fetchBlockInfo is not supported by U5CProvider: the utxo-rpc gRPC protocol does not expose block metadata. Use a companion HTTP provider such as Koios or Blockfrost.",
+    );
   }
 
   /**
-   * Unimplemented - open for contribution
-   *
-   * Fetches the collection assets for a given policy ID.
-   * @param policyId - The policy ID to fetch collection assets for
-   * @param cursor - The cursor to fetch the next set of assets (optional)
+   * Not available via the utxo-rpc gRPC protocol.
+   * There is no policy-scoped asset enumeration in the protocol.
+   * Use a companion HTTP provider (Koios, Blockfrost, etc.) to enumerate collection assets.
    */
   fetchCollectionAssets(
-    policyId: string,
-    cursor?: number | string,
+    _policyId: string,
+    _cursor?: number | string,
   ): Promise<{ assets: Asset[]; next?: string | number | null }> {
-    throw new Error("Method not implemented.");
+    throw new Error(
+      "fetchCollectionAssets is not supported by U5CProvider: the utxo-rpc gRPC protocol has no policy-scoped asset query. Use a companion HTTP provider such as Koios or Blockfrost.",
+    );
   }
 
   /**
-   * Unimplemented - open for contribution
-   *
-   * Fetches the information (AssetMetadata) for a given handle.
-   * @param handle - The handle to fetch information for
+   * Not available via the utxo-rpc gRPC protocol.
+   * ADA Handle resolution requires querying the on-chain handle policy — there is no
+   * dedicated API for this in utxo-rpc. Use a companion HTTP provider.
    */
-  fetchHandle(handle: string): Promise<object> {
-    throw new Error("Method not implemented.");
+  fetchHandle(_handle: string): Promise<object> {
+    throw new Error(
+      "fetchHandle is not supported by U5CProvider: the utxo-rpc gRPC protocol has no ADA Handle registry endpoint. Use a companion HTTP provider such as Koios or Blockfrost.",
+    );
   }
 
   /**
-   * Unimplemented - open for contribution
-   *
-   * Resolve the handle's address from the handle.
-   * @param handle - The handle to resolve
+   * Not available via the utxo-rpc gRPC protocol.
+   * ADA Handle resolution requires querying the on-chain handle policy — there is no
+   * dedicated API for this in utxo-rpc. Use a companion HTTP provider.
    */
-  fetchHandleAddress(handle: string): Promise<string> {
-    throw new Error("Method not implemented.");
+  fetchHandleAddress(_handle: string): Promise<string> {
+    throw new Error(
+      "fetchHandleAddress is not supported by U5CProvider: the utxo-rpc gRPC protocol has no ADA Handle registry endpoint. Use a companion HTTP provider such as Koios or Blockfrost.",
+    );
   }
 
   /**
@@ -372,18 +380,28 @@ export class U5CProvider
     return this._rpcPParamsToProtocol(rpcPParams);
   }
 
-  async fetchCostModels(epoch?: number): Promise<number[][]> {
-    throw new Error("Method not implemented.");
+  /**
+   * Not available via the utxo-rpc gRPC protocol.
+   * The `readParams()` response (`PParams`) covers fee coefficients and slot limits
+   * but does NOT include Plutus execution unit cost models.
+   * Use a companion HTTP provider (Koios, Blockfrost, etc.) to fetch cost models.
+   */
+  async fetchCostModels(_epoch?: number): Promise<number[][]> {
+    throw new Error(
+      "fetchCostModels is not supported by U5CProvider: the utxo-rpc PParams response does not include Plutus cost models. Use a companion HTTP provider such as Koios or Blockfrost.",
+    );
   }
 
   /**
-   * Unimplemented - open for contribution
-   *
-   * Fetches transaction info for a given hash.
-   * @param hash - The transaction hash
+   * Not available via the utxo-rpc gRPC protocol.
+   * The protocol supports reading UTxOs by output reference but does not expose
+   * transaction-level metadata (fees, validity range, block, etc.).
+   * Use a companion HTTP provider (Koios, Blockfrost, etc.) to fetch transaction info.
    */
-  fetchTxInfo(hash: string): Promise<TransactionInfo> {
-    throw new Error("Method not implemented.");
+  fetchTxInfo(_hash: string): Promise<TransactionInfo> {
+    throw new Error(
+      "fetchTxInfo is not supported by U5CProvider: the utxo-rpc gRPC protocol has no transaction-info endpoint. Use a companion HTTP provider such as Koios or Blockfrost.",
+    );
   }
 
   /**
@@ -432,27 +450,27 @@ export class U5CProvider
   }
 
   /**
-   * Unimplemented - open for contribution
-   *
-   * Fetches the governance proposal information.
-   * @param txHash The transaction hash of the proposal
-   * @param certIndex The certificate index of the proposal
-   * @returns The governance proposal information
+   * Not available via the utxo-rpc gRPC protocol.
+   * Governance proposal data is not part of the utxo-rpc spec.
+   * Use a companion HTTP provider (Koios, Blockfrost, etc.) to fetch governance proposals.
    */
   async fetchGovernanceProposal(
-    txHash: string,
-    certIndex: number,
+    _txHash: string,
+    _certIndex: number,
   ): Promise<GovernanceProposalInfo> {
-    throw new Error("Method not implemented");
+    throw new Error(
+      "fetchGovernanceProposal is not supported by U5CProvider: the utxo-rpc gRPC protocol has no governance proposal endpoint. Use a companion HTTP provider such as Koios or Blockfrost.",
+    );
   }
 
   /**
-   * Unimplemented - open for contribution
-   *
-   * @param url
+   * Not available for U5CProvider.
+   * This provider uses gRPC — there is no generic HTTP pass-through endpoint.
    */
-  get(url: string): Promise<any> {
-    throw new Error("Method not implemented.");
+  get(_url: string): Promise<any> {
+    throw new Error(
+      "get() is not supported by U5CProvider: this provider communicates over gRPC, not HTTP.",
+    );
   }
 
   /**
