@@ -131,7 +131,7 @@ export class IagonInsightProvider
           const info = await this.fetchTxInfo(tx.tx_hash);
           txs.push({
             ...info,
-            blockHeight: tx.block_height,
+            blockHeight: tx.block_height ?? info.blockHeight,
             blockTime: tx.block_time,
           } as TransactionInfo);
         }
@@ -173,15 +173,20 @@ export class IagonInsightProvider
     }
   }
 
+  async fetchLatestBlock(): Promise<BlockInfo> {
+    return this.fetchBlockInfo("latest");
+  }
+
   async fetchBlockInfo(hash: string): Promise<BlockInfo> {
     try {
       const data = await this.request({ url: this.bf(`blocks/${hash}`) });
-      return {
+      return <BlockInfo>{
         confirmations: data.confirmations,
         epoch: data.epoch,
         epochSlot: data.epoch_slot?.toString() ?? "",
         fees: data.fees,
         hash: data.hash,
+        height: data.height ?? undefined,
         nextBlock: data.next_block ?? "",
         operationalCertificate: data.op_cert,
         output: data.output ?? "0",
@@ -273,6 +278,7 @@ export class IagonInsightProvider
       const utxos = await this.request({ url: this.bf(`txs/${hash}/utxos`) });
       return <TransactionInfo>{
         block: tx.block,
+        blockHeight: tx.block_height ?? undefined,
         deposit: tx.deposit,
         fees: tx.fees,
         hash: tx.hash,
@@ -283,6 +289,7 @@ export class IagonInsightProvider
         size: tx.size,
         inputs: utxos.inputs,
         outputs: utxos.outputs,
+        validContract: tx.valid_contract ?? undefined,
       };
     } catch (error) {
       throw parseHttpError(error);

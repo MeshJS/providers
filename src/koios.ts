@@ -275,6 +275,16 @@ export class KoiosProvider
     }
   }
 
+  async fetchLatestBlock(): Promise<BlockInfo> {
+    try {
+      const { data, status } = await this._axiosInstance.get("tip");
+      if (status !== 200 || !data[0]?.hash) throw parseHttpError(data);
+      return await this.fetchBlockInfo(data[0].hash);
+    } catch (error) {
+      throw typeof error === "string" ? error : parseHttpError(error);
+    }
+  }
+
   /**
    * Fetches the block information for a given block hash.
    * @param hash The block hash to fetch from
@@ -293,6 +303,7 @@ export class KoiosProvider
           epochSlot: data[0].epoch_slot.toString(),
           fees: data[0].total_fees ?? "",
           hash: data[0].hash,
+          height: data[0].block_height ?? undefined,
           nextBlock: data[0].child_hash ?? "",
           operationalCertificate: data[0].op_cert,
           output: data[0].total_output ?? "0",
@@ -462,9 +473,10 @@ export class KoiosProvider
         _tx_hashes: [hash],
       });
 
-      if (status === 200 && data.length == 1)
-        return <TransactionInfo>{
+      if (status === 200 && data.length === 1) {
+        const transaction = <TransactionInfo>{
           block: data[0].block_hash,
+          blockHeight: data[0].block_height ?? undefined,
           deposit: data[0].deposit,
           fees: data[0].fee,
           hash: data[0].tx_hash,
@@ -474,7 +486,16 @@ export class KoiosProvider
           slot: data[0].absolute_slot.toString(),
           size: data[0].tx_size,
         };
+        const validContract = data[0].valid_contract;
+        return {
+          ...transaction,
+          ...(typeof validContract === "boolean" && { validContract }),
+        };
+      }
 
+      if (status === 200 && Array.isArray(data) && data.length === 0) {
+        throw { status: 404, message: `Transaction ${hash} not found` };
+      }
       throw parseHttpError(data);
     } catch (error) {
       throw parseHttpError(error);

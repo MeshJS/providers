@@ -300,6 +300,10 @@ export class YaciProvider
    * @param hash The block hash to fetch from
    * @returns The block information
    */
+  async fetchLatestBlock(): Promise<BlockInfo> {
+    return this.fetchBlockInfo("latest");
+  }
+
   async fetchBlockInfo(hash: string): Promise<BlockInfo> {
     try {
       const { data, status } = await this._axiosInstance.get(`blocks/${hash}`);
@@ -308,15 +312,16 @@ export class YaciProvider
         return <BlockInfo>{
           confirmations: data.confirmations,
           epoch: data.epoch,
-          epochSlot: data.epoch_slot.toString(),
+          epochSlot: data.epoch_slot?.toString() ?? "",
           fees: data.fees,
           hash: data.hash,
+          height: data.height ?? undefined,
           nextBlock: data.next_block ?? "",
           operationalCertificate: data.op_cert,
           output: data.output ?? "0",
           previousBlock: data.previous_block,
           size: data.size,
-          slot: data.slot.toString(),
+          slot: data.slot?.toString() ?? "",
           slotLeader: data.slot_leader ?? "",
           time: data.time,
           txCount: data.tx_count,
@@ -454,9 +459,10 @@ export class YaciProvider
     try {
       const { data, status } = await this._axiosInstance.get(`txs/${hash}`);
 
-      if (status === 200)
-        return <TransactionInfo>{
+      if (status === 200) {
+        const transaction = <TransactionInfo>{
           block: data.block,
+          blockHeight: data.block_height ?? undefined,
           deposit: data.deposit,
           fees: data.fees,
           hash: data.hash,
@@ -466,6 +472,12 @@ export class YaciProvider
           slot: data.slot.toString(),
           size: data.size,
         };
+        const validContract = data.valid_contract;
+        return {
+          ...transaction,
+          ...(typeof validContract === "boolean" && { validContract }),
+        };
+      }
 
       throw parseHttpError(data);
     } catch (error) {

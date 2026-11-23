@@ -186,6 +186,10 @@ export class MeshDevnetProvider
     ];
   }
 
+  async fetchLatestBlock(): Promise<BlockInfo> {
+    return this.fetchBlockInfo("latest");
+  }
+
   async fetchBlockInfo(hash: string): Promise<BlockInfo> {
     const data = await this._getJson<any>(`${this.base}/block/${hash}`);
     return toMeshBlockInfo(data);
@@ -439,8 +443,11 @@ export class MeshDevnetProvider
     const res = await fetch(url);
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      throw new Error(
-        `MeshDevnetProvider GET ${url} [${res.status}]: ${(body as any).error ?? res.statusText}`,
+      throw Object.assign(
+        new Error(
+          `MeshDevnetProvider GET ${url} [${res.status}]: ${(body as any).error ?? res.statusText}`,
+        ),
+        { status: res.status },
       );
     }
     return res.json() as Promise<T>;
@@ -493,12 +500,13 @@ function toMeshProtocol(raw: any): Protocol {
 }
 
 function toMeshBlockInfo(raw: any): BlockInfo {
-  return {
+  return <BlockInfo>{
     confirmations: 0,
     epoch: Number(raw.epoch ?? 0),
     epochSlot: String(raw.epochSlot ?? 0),
     fees: String(raw.feesCollected ?? "0"),
     hash: raw.hash,
+    height: raw.height ?? undefined,
     nextBlock: raw.nextBlock ?? "",
     operationalCertificate: "",
     output: String(raw.output ?? "0"),
@@ -533,9 +541,9 @@ function toMeshTxInfo(raw: any): TransactionInfo {
       },
     }),
   );
-  return {
+  return <TransactionInfo>{
     block: raw.block ?? "",
-    blockHeight: Number(raw.blockHeight ?? 0),
+    blockHeight: raw.blockHeight == null ? undefined : Number(raw.blockHeight),
     blockTime: Number(raw.blockTime ?? 0),
     deposit: String(raw.deposit ?? "0"),
     fees: String(raw.fees ?? raw.fee ?? "0"),
@@ -547,5 +555,6 @@ function toMeshTxInfo(raw: any): TransactionInfo {
     size: Number(raw.size ?? 0),
     inputs,
     outputs,
+    validContract: raw.validContract ?? undefined,
   };
 }
