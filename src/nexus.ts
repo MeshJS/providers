@@ -27,7 +27,6 @@ import {
   fromNativeScript,
   normalizePlutusScript,
   resolveRewardAddress,
-  Serialization,
   toScriptRef,
 } from "@meshsdk/core-cst";
 
@@ -40,6 +39,7 @@ import {
   NexusUTxO,
 } from "./types";
 import { getAdditionalUtxos, parseAssetUnit, parseHttpError } from "./utils";
+import { readTransactionValidity } from "./utils/read-transaction-validity";
 
 /**
  * The network ids Nexus publishes in its OpenAPI schema — the `enum` on the
@@ -750,23 +750,10 @@ export class NexusProvider
       return undefined;
     }
 
-    const blockHeight = data.blockHeight ?? undefined;
-    if (typeof data.cbor !== "string" || !data.cbor) return { blockHeight };
-    try {
-      // Only Alonzo and later encode an explicit phase-2 validity bit here.
-      const reader = new Serialization.CborReader(
-        Serialization.TxCBOR(data.cbor),
-      );
-      if (reader.readStartArray() !== 4) return { blockHeight };
-      reader.readEncodedValue(); // transaction body
-      reader.readEncodedValue(); // witness set
-      const validContract = reader.readBoolean();
-      reader.readEncodedValue(); // auxiliary data
-      reader.readEndArray();
-      return { blockHeight, validContract };
-    } catch {
-      return { blockHeight };
-    }
+    return {
+      blockHeight: data.blockHeight ?? undefined,
+      validContract: readTransactionValidity(data.cbor),
+    };
   }
 
   async fetchUTxOs(hash: string, index?: number): Promise<UTxO[]> {

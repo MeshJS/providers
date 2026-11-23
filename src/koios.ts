@@ -34,6 +34,7 @@ import {
 import { utxosToAssets } from "./common/utxos-to-assets";
 import { KoiosAsset, KoiosReferenceScript, KoiosUTxO } from "./types";
 import { getAdditionalUtxos, parseAssetUnit, parseHttpError } from "./utils";
+import { readTransactionValidity } from "./utils/read-transaction-validity";
 
 export type KoiosSupportedNetworks = "api" | "preview" | "preprod" | "guild";
 
@@ -486,7 +487,10 @@ export class KoiosProvider
           slot: data[0].absolute_slot.toString(),
           size: data[0].tx_size,
         };
-        const validContract = data[0].valid_contract;
+        const validContract =
+          typeof data[0].valid_contract === "boolean"
+            ? data[0].valid_contract
+            : await this.fetchTransactionValidity(hash, transaction.block);
         return {
           ...transaction,
           ...(typeof validContract === "boolean" && { validContract }),
@@ -499,6 +503,32 @@ export class KoiosProvider
       throw parseHttpError(data);
     } catch (error) {
       throw parseHttpError(error);
+    }
+  }
+
+  private async fetchTransactionValidity(
+    hash: string,
+    block: string,
+  ): Promise<boolean | undefined> {
+    if (!block) return undefined;
+    try {
+      const { data, status } = await this._axiosInstance.post("tx_cbor", {
+        _tx_hashes: [hash],
+      });
+      const tx = Array.isArray(data) && data.length === 1 ? data[0] : undefined;
+      if (
+        status !== 200 ||
+        tx?.tx_hash?.toLowerCase() !== hash.toLowerCase() ||
+        tx?.block_hash !== block
+      ) {
+        return undefined;
+      }
+      return typeof tx.valid_contract === "boolean"
+        ? tx.valid_contract
+        : readTransactionValidity(tx.cbor);
+    } catch {
+      // Older deployments may not provide raw CBOR for this transaction.
+      return undefined;
     }
   }
 
