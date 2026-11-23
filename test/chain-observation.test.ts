@@ -12,6 +12,28 @@ const height = 0;
 const slot = 42;
 
 describe("chain observation", () => {
+  it.each([null, { hash: "c3".repeat(28) }])(
+    "reads the Koios constitution with guardrails %j",
+    async (guardrails) => {
+      const provider = new KoiosProvider("https://koios.test");
+      const url = "ipfs://example";
+      const dataHash = "d4".repeat(32);
+      const post = jest.fn().mockResolvedValue({
+        data: { result: { metadata: { url, hash: dataHash }, guardrails } },
+      });
+      Object.assign(provider, { _axiosInstance: { post } });
+      await expect(provider.fetchConstitution()).resolves.toEqual({
+        anchor: { anchorUrl: url, anchorDataHash: dataHash },
+        ...(guardrails && { guardrailScriptHash: guardrails.hash }),
+      });
+      expect(post).toHaveBeenCalledWith("ogmios", {
+        jsonrpc: "2.0",
+        method: "queryLedgerState/constitution",
+        id: 1,
+      });
+    },
+  );
+
   it("reads the Koios tip and maps ledger validity from tx_info", async () => {
     const provider = new KoiosProvider("https://koios.test");
     const get = jest.fn().mockResolvedValue({
