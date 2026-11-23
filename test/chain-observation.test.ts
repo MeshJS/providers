@@ -60,6 +60,41 @@ describe("chain observation", () => {
     await expect(provider.fetchTxInfo(hash)).rejects.toContain('"status":404');
   });
 
+  it.each([
+    [blockHash, "84a0a0f4f6", false],
+    [blockHash, "84a0a0f5f6", true],
+    ["c3".repeat(32), "84a0a0f5f6", undefined],
+  ])(
+    "recovers Koios validity from the confirmed CBOR for block %s",
+    async (block, cbor, validity) => {
+      const provider = new KoiosProvider("https://koios.test");
+      const post = jest
+        .fn()
+        .mockResolvedValueOnce({
+          status: 200,
+          data: [
+            {
+              tx_hash: hash,
+              block_hash: blockHash,
+              block_height: height,
+              absolute_slot: slot,
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          status: 200,
+          data: [{ tx_hash: hash, block_hash: block, cbor }],
+        });
+      Object.assign(provider, { _axiosInstance: { post } });
+      const tx = await provider.fetchTxInfo(hash);
+      expect(tx.blockHeight).toBe(height);
+      expect((tx as { validContract?: boolean }).validContract).toBe(validity);
+      expect(post).toHaveBeenNthCalledWith(2, "tx_cbor", {
+        _tx_hashes: [hash],
+      });
+    },
+  );
+
   it.each(["Yaci", "Iagon"] as const)(
     "maps %s's Blockfrost-compatible observation fields",
     async (name) => {
