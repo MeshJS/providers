@@ -7,6 +7,7 @@ import {
   AssetMetadata,
   BlockInfo,
   castProtocol,
+  ConstitutionState,
   DEFAULT_FETCHER_OPTIONS,
   fromUTF8,
   GovernanceProposalInfo,
@@ -283,6 +284,35 @@ export class KoiosProvider
       return await this.fetchBlockInfo(data[0].hash);
     } catch (error) {
       throw typeof error === "string" ? error : parseHttpError(error);
+    }
+  }
+
+  async fetchConstitution(): Promise<ConstitutionState> {
+    try {
+      const { data } = await this._axiosInstance.post("ogmios", {
+        jsonrpc: "2.0",
+        method: "queryLedgerState/constitution",
+        id: 1,
+      });
+      const state = data?.result;
+      const scriptHash = state?.guardrails?.hash;
+      if (
+        typeof state?.metadata?.url !== "string" ||
+        !/^[a-f\d]{64}$/i.test(state.metadata.hash) ||
+        (state.guardrails !== null && !/^[a-f\d]{56}$/i.test(scriptHash))
+      ) {
+        throw new Error("Koios did not return the current constitution");
+      }
+      return {
+        anchor: {
+          anchorUrl: state.metadata.url,
+          anchorDataHash: state.metadata.hash,
+        },
+        ...(scriptHash && { guardrailScriptHash: scriptHash }),
+      };
+    } catch (error) {
+      if (axios.isAxiosError(error)) throw parseHttpError(error);
+      throw error;
     }
   }
 
