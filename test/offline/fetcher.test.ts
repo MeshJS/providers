@@ -152,6 +152,13 @@ describe("OfflineFetcher", () => {
     quantity: "1000",
   };
 
+  describe("network", () => {
+    it("should state the network it was created for", () => {
+      expect(new OfflineFetcher("preprod").network).toBe("preprod");
+      expect(fetcher.network).toBeUndefined();
+    });
+  });
+
   describe("addAccount", () => {
     it("should add a valid Bech32 account", () => {
       expect(() =>

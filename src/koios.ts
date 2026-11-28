@@ -7,6 +7,7 @@ import {
   AssetMetadata,
   BlockInfo,
   castProtocol,
+  ConstitutionState,
   DEFAULT_FETCHER_OPTIONS,
   fromUTF8,
   GovernanceProposalInfo,
@@ -34,6 +35,7 @@ import {
 import { utxosToAssets } from "./common/utxos-to-assets";
 import { KoiosAsset, KoiosReferenceScript, KoiosUTxO } from "./types";
 import { getAdditionalUtxos, parseAssetUnit, parseHttpError } from "./utils";
+import { readTransactionValidity } from "./utils/read-transaction-validity";
 
 export type KoiosSupportedNetworks = "api" | "preview" | "preprod" | "guild";
 
@@ -275,6 +277,45 @@ export class KoiosProvider
     }
   }
 
+  async fetchLatestBlock(): Promise<BlockInfo> {
+    try {
+      const { data, status } = await this._axiosInstance.get("tip");
+      if (status !== 200 || !data[0]?.hash) throw parseHttpError(data);
+      return await this.fetchBlockInfo(data[0].hash);
+    } catch (error) {
+      throw typeof error === "string" ? error : parseHttpError(error);
+    }
+  }
+
+  async fetchConstitution(): Promise<ConstitutionState> {
+    try {
+      const { data } = await this._axiosInstance.post("ogmios", {
+        jsonrpc: "2.0",
+        method: "queryLedgerState/constitution",
+        id: 1,
+      });
+      const state = data?.result;
+      const scriptHash = state?.guardrails?.hash;
+      if (
+        typeof state?.metadata?.url !== "string" ||
+        !/^[a-f\d]{64}$/i.test(state.metadata.hash) ||
+        (state.guardrails !== null && !/^[a-f\d]{56}$/i.test(scriptHash))
+      ) {
+        throw new Error("Koios did not return the current constitution");
+      }
+      return {
+        anchor: {
+          anchorUrl: state.metadata.url,
+          anchorDataHash: state.metadata.hash,
+        },
+        ...(scriptHash && { guardrailScriptHash: scriptHash }),
+      };
+    } catch (error) {
+      if (axios.isAxiosError(error)) throw parseHttpError(error);
+      throw error;
+    }
+  }
+
   /**
    * Fetches the block information for a given block hash.
    * @param hash The block hash to fetch from
@@ -293,6 +334,7 @@ export class KoiosProvider
           epochSlot: data[0].epoch_slot.toString(),
           fees: data[0].total_fees ?? "",
           hash: data[0].hash,
+          height: data[0].block_height ?? undefined,
           nextBlock: data[0].child_hash ?? "",
           operationalCertificate: data[0].op_cert,
           output: data[0].total_output ?? "0",
@@ -462,9 +504,10 @@ export class KoiosProvider
         _tx_hashes: [hash],
       });
 
-      if (status === 200 && data.length == 1)
-        return <TransactionInfo>{
+      if (status === 200 && data.length === 1) {
+        const transaction = <TransactionInfo>{
           block: data[0].block_hash,
+          blockHeight: data[0].block_height ?? undefined,
           deposit: data[0].deposit,
           fees: data[0].fee,
           hash: data[0].tx_hash,
@@ -474,10 +517,48 @@ export class KoiosProvider
           slot: data[0].absolute_slot.toString(),
           size: data[0].tx_size,
         };
+        const validContract =
+          typeof data[0].valid_contract === "boolean"
+            ? data[0].valid_contract
+            : await this.fetchTransactionValidity(hash, transaction.block);
+        return {
+          ...transaction,
+          ...(typeof validContract === "boolean" && { validContract }),
+        };
+      }
 
+      if (status === 200 && Array.isArray(data) && data.length === 0) {
+        throw { status: 404, message: `Transaction ${hash} not found` };
+      }
       throw parseHttpError(data);
     } catch (error) {
       throw parseHttpError(error);
+    }
+  }
+
+  private async fetchTransactionValidity(
+    hash: string,
+    block: string,
+  ): Promise<boolean | undefined> {
+    if (!block) return undefined;
+    try {
+      const { data, status } = await this._axiosInstance.post("tx_cbor", {
+        _tx_hashes: [hash],
+      });
+      const tx = Array.isArray(data) && data.length === 1 ? data[0] : undefined;
+      if (
+        status !== 200 ||
+        tx?.tx_hash?.toLowerCase() !== hash.toLowerCase() ||
+        tx?.block_hash !== block
+      ) {
+        return undefined;
+      }
+      return typeof tx.valid_contract === "boolean"
+        ? tx.valid_contract
+        : readTransactionValidity(tx.cbor);
+    } catch {
+      // Older deployments may not provide raw CBOR for this transaction.
+      return undefined;
     }
   }
 

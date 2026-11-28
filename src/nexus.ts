@@ -39,6 +39,7 @@ import {
   NexusUTxO,
 } from "./types";
 import { getAdditionalUtxos, parseAssetUnit, parseHttpError } from "./utils";
+import { readTransactionValidity } from "./utils/read-transaction-validity";
 
 /**
  * The network ids Nexus publishes in its OpenAPI schema — the `enum` on the
@@ -680,9 +681,27 @@ export class NexusProvider
         `transactions/${hash}`,
       );
 
-      if (status === 200 || status === 202)
-        return <TransactionInfo>{
+      if (status === 200 || status === 202) {
+        let blockHeight: number | undefined = data.block_height ?? undefined;
+        let validContract: boolean | undefined =
+          typeof data.valid_contract === "boolean"
+            ? data.valid_contract
+            : undefined;
+        if (
+          typeof data.block_hash === "string" &&
+          data.block_hash &&
+          (blockHeight === undefined || validContract === undefined)
+        ) {
+          const observation = await this.fetchTxObservation(
+            hash,
+            data.block_hash,
+          );
+          blockHeight ??= observation?.blockHeight;
+          validContract ??= observation?.validContract;
+        }
+        const transaction = <TransactionInfo>{
           block: data.block_hash,
+          blockHeight,
           deposit: data.deposit ?? "",
           fees: data.fee ?? "",
           hash: data.txHash,
@@ -692,11 +711,49 @@ export class NexusProvider
           slot: data.absolute_slot?.toString() ?? "",
           size: data.txSize ?? 0,
         };
+        return {
+          ...transaction,
+          ...(validContract !== undefined && { validContract }),
+        };
+      }
 
       throw parseHttpError(data);
     } catch (error) {
       throw parseHttpError(error);
     }
+  }
+
+  private async fetchTxObservation(
+    hash: string,
+    blockHash: string,
+  ): Promise<{ blockHeight?: number; validContract?: boolean } | undefined> {
+    let response;
+    try {
+      response = await this._axiosInstance.get<{
+        txHash?: string;
+        blockHash?: string;
+        blockHeight?: number;
+        cbor?: string;
+      }>(`transactions/${hash}/cbor`);
+    } catch {
+      // The raw transaction endpoint may be unavailable to this provider.
+      return undefined;
+    }
+    const { data, status } = response;
+    if (
+      status !== 200 ||
+      typeof data?.txHash !== "string" ||
+      data.txHash.toLowerCase() !== hash.toLowerCase() ||
+      typeof data.blockHash !== "string" ||
+      data.blockHash.toLowerCase() !== blockHash.toLowerCase()
+    ) {
+      return undefined;
+    }
+
+    return {
+      blockHeight: data.blockHeight ?? undefined,
+      validContract: readTransactionValidity(data.cbor),
+    };
   }
 
   async fetchUTxOs(hash: string, index?: number): Promise<UTxO[]> {
@@ -867,6 +924,7 @@ export class NexusProvider
       epochSlot: data.epoch_slot?.toString() ?? "",
       fees: data.fees ?? "",
       hash: data.hash,
+      height: data.height ?? data.number ?? undefined,
       nextBlock: data.next_block ?? "",
       operationalCertificate: data.op_cert ?? "",
       output: data.output ?? "0",

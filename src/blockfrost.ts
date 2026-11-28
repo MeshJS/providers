@@ -389,9 +389,8 @@ export class BlockfrostProvider
   }
 
   /**
-   * Fetches the metadata for a given asset.
-   * @param asset - The asset to fetch metadata for
-   * @returns The metadata for the asset
+   * Fetches the latest block of the chain.
+   * @returns The block information, with `height`: the block number
    */
   async fetchLatestBlock(): Promise<BlockInfo> {
     try {
@@ -404,6 +403,7 @@ export class BlockfrostProvider
           epochSlot: data.epoch_slot.toString(),
           fees: data.fees,
           hash: data.hash,
+          height: data.height ?? undefined,
           nextBlock: data.next_block ?? "",
           operationalCertificate: data.op_cert,
           output: data.output ?? "0",
@@ -425,7 +425,7 @@ export class BlockfrostProvider
   /**
    * Fetches the block information for a given block hash.
    * @param hash The block hash to fetch from
-   * @returns The block information
+   * @returns The block information, with `height`: the block number
    */
   async fetchBlockInfo(hash: string): Promise<BlockInfo> {
     try {
@@ -438,6 +438,7 @@ export class BlockfrostProvider
           epochSlot: data.epoch_slot.toString(),
           fees: data.fees,
           hash: data.hash,
+          height: data.height ?? undefined,
           nextBlock: data.next_block ?? "",
           operationalCertificate: data.op_cert,
           output: data.output ?? "0",
@@ -600,7 +601,8 @@ export class BlockfrostProvider
   /**
    * Fetches the transaction information for a given transaction hash.
    * @param hash The transaction hash to fetch
-   * @returns The transaction information
+   * @returns The transaction information, with `blockHeight`: the number of its block, and
+   * `validContract`: false when a script of the transaction failed and only its collateral was taken
    */
   async fetchTxInfo(hash: string): Promise<TransactionInfo> {
     try {
@@ -614,6 +616,7 @@ export class BlockfrostProvider
         if (status !== 200) throw parseHttpError(data);
         return <TransactionInfo>{
           block: txData.block,
+          blockHeight: txData.block_height ?? undefined,
           deposit: txData.deposit,
           fees: txData.fees,
           hash: txData.hash,
@@ -624,6 +627,7 @@ export class BlockfrostProvider
           size: txData.size,
           inputs: data.inputs,
           outputs: data.outputs,
+          validContract: txData.valid_contract ?? undefined,
         };
       }
 

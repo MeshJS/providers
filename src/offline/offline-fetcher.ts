@@ -73,7 +73,11 @@ export class OfflineFetcher implements IFetcher {
   private protocolParameters: Record<number, Protocol> = {};
   private transactions: Record<string, TransactionInfo> = {};
 
-  constructor(private network?: Network) {}
+  /**
+   * @param network The network the pre-loaded data belongs to; "mainnet" where a method needs
+   * one and none is given
+   */
+  constructor(readonly network?: Network) {}
 
   private paginate<T>(
     items: T[],
